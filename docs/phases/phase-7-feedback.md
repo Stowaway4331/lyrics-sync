@@ -24,6 +24,7 @@ From testing the Android development build. **Exit:** every item below works on 
 - [x] 7.12 Silently pre-translate each song into the user's top 3 languages
 - [x] 7.13 "Wrong version" discards the pre-translations made for that lyrics version
 - [x] 7.14 Show translations only after the user picks a language (no automatic display)
+- [x] 7.15 Plain view reuses the synced view: same text size, all text in full colour, no auto-scroll
 
 ## Notes
 
@@ -47,3 +48,4 @@ From testing the Android development build. **Exit:** every item below works on 
 - 2026-09-25, item 7.4: a Synced / Plain switch next to the status badges (only for songs with timed lyrics). Plain shows the same lines as static text, with no highlight, auto-scroll or nudge controls, and translations stay under their lines. The sync itself keeps running, so switching back resumes at the right line. JS only; needs a check on the phone.
 - 2026-09-25, item 7.5: tapping a line in the synced view sets the song position to that line's timestamp from that moment and resets the nudge, so + / − fine-tune from there; auto-scroll follows immediately. Works without audio sync too (songs opened from history or chat), and the status reads "Listen or tap a line to sync" until then. Line handlers are stable so only changed lines re-render. JS only; needs a check on the phone.
 - 2026-09-25, item 7.14: the player no longer applies the last-used language when a song is recognised, opened or re-found; a translation appears only after the user picks a language (translate button or chat). The picker's checkmark now shows the language displayed for the current song ("Off" if none). Server-side pre-translation (7.12) is unchanged and stays invisible until then, so a pick is still instant. JS only; needs a check on the phone.
+- 2026-09-25, item 7.15: plain view is now the synced view with two things turned off: auto-scroll, and the dimming of past/upcoming lines (every line and translation is full text colour, white in dark mode). Line size, tap-to-sync and the ± controls are the same as in synced view, and the clock keeps running so switching back lands on the right line. Replaces the smaller plain-text styling from 7.4. JS only; needs a check on the phone.

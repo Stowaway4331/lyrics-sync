@@ -29,7 +29,8 @@ const LyricLine = memo(function LyricLine({
 }: {
   text: string;
   translation?: string;
-  state: 'past' | 'current' | 'future' | 'plain';
+  /** `static`: the synced look, all in full text colour (plain view); `plain`: lyrics that have no timing. */
+  state: 'past' | 'current' | 'future' | 'static' | 'plain';
   index: number;
   onLineLayout?: (index: number, y: number) => void;
   /** Tap to sync the lyrics to this line. */
@@ -50,7 +51,7 @@ const LyricLine = memo(function LyricLine({
       <Text
         className={cn(
           state === 'plain' ? 'text-lg leading-7' : 'text-2xl font-semibold leading-8',
-          state === 'current' && 'text-foreground',
+          (state === 'current' || state === 'static') && 'text-foreground',
           state === 'past' && 'text-muted-foreground/60',
           state === 'future' && 'text-muted-foreground'
         )}
@@ -58,7 +59,11 @@ const LyricLine = memo(function LyricLine({
         {empty ? '♪' : text}
       </Text>
       {showTranslation && (
-        <Text className={cn('mt-1 text-base leading-6', state === 'current' ? 'text-foreground/80' : 'text-muted-foreground')}>
+        <Text
+          className={cn(
+            'mt-1 text-base leading-6',
+            state === 'static' ? 'text-foreground' : state === 'current' ? 'text-foreground/80' : 'text-muted-foreground'
+          )}>
           {translation}
         </Text>
       )}
@@ -97,14 +102,10 @@ export default function PlayerScreen() {
   const plainText = player?.lyrics?.plain ?? null;
   const synced = useMemo(() => (syncedText ? parseLrc(syncedText) : null), [syncedText]);
   const plain = useMemo(() => (!synced && plainText ? plainLines(plainText) : null), [synced, plainText]);
-  // Plain view: the same lines without timing, highlight or auto-scroll (translations stay aligned).
+  // Plain view: the synced view without auto-scroll or dimmed lines. The clock keeps running,
+  // so switching back resumes at the right line.
   const [showPlain, setShowPlain] = useState(false);
-  const { index, positionMs } = useSyncClock(
-    showPlain ? [] : (synced ?? []),
-    player?.sync ?? null,
-    player?.nudgeMs ?? 0,
-    calibrationMs
-  );
+  const { index, positionMs } = useSyncClock(synced ?? [], player?.sync ?? null, player?.nudgeMs ?? 0, calibrationMs);
 
   // Auto-scroll keeps the current line about a third of the way down the screen.
   const scrollRef = useRef<ScrollView>(null);
@@ -128,11 +129,11 @@ export default function PlayerScreen() {
     AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion).catch(() => {});
   }, []);
   useEffect(() => {
-    if (index < 0 || Date.now() < manualUntil.current) return;
+    if (showPlain || index < 0 || Date.now() < manualUntil.current) return;
     const y = lineY.current[index];
     if (y == null) return;
     scrollRef.current?.scrollTo({ y: Math.max(0, y - viewportH * 0.33), animated: !reduceMotion });
-  }, [index, viewportH, reduceMotion]);
+  }, [index, viewportH, reduceMotion, showPlain]);
 
   if (!player) {
     return (
@@ -160,7 +161,6 @@ export default function PlayerScreen() {
   else if (!lyrics) status = 'No lyrics found';
   else if (lyrics.instrumental) status = 'Instrumental';
   else if (!synced) status = 'Lyrics not synced';
-  else if (showPlain) status = 'Plain view';
   else if (!sync) status = 'Listen or tap a line to sync';
   else if (ended) status = 'Song ended';
   else status = `Synced · ${formatTime(positionMs)}`;
@@ -222,10 +222,10 @@ export default function PlayerScreen() {
             key={`${line.timeMs}-${i}`}
             text={line.text}
             translation={translations?.[i]}
-            state={showPlain ? 'plain' : !sync ? 'future' : i === index ? 'current' : i < index ? 'past' : 'future'}
+            state={showPlain ? 'static' : !sync ? 'future' : i === index ? 'current' : i < index ? 'past' : 'future'}
             index={i}
             onLineLayout={onLineLayout}
-            onSelect={showPlain ? undefined : onSelectLine}
+            onSelect={onSelectLine}
           />
         ))}
         {plain?.map((text, i) => (
@@ -253,7 +253,7 @@ export default function PlayerScreen() {
           onCancel={recognizer.cancel}
         />
         <View className="flex-row items-center gap-1">
-          {synced && sync && !showPlain && (
+          {synced && sync && (
             <>
               <Button
                 variant="ghost"
