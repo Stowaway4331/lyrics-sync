@@ -105,10 +105,12 @@ export default function PlayerScreen() {
   // Plain view: the synced view with every sync feature off (auto-scroll, dimmed lines,
   // tap-to-sync, ± nudge). The clock keeps running only so switching back lands on the right line.
   const [showPlain, setShowPlain] = useState(false);
-  // Pausing stops only the auto-scroll: the clock and highlight keep following the song, so
-  // resuming scrolls straight to the line playing now.
-  const [scrollPaused, setScrollPaused] = useState(false);
   const { index, positionMs } = useSyncClock(synced ?? [], player?.sync ?? null, player?.nudgeMs ?? 0, calibrationMs);
+  // Pause freezes the highlight (and so the auto-scroll) on the line playing at that moment.
+  // The clock keeps running underneath, so play jumps to the line playing now.
+  const [pausedIndex, setPausedIndex] = useState<number | null>(null);
+  const paused = pausedIndex !== null;
+  const shownIndex = paused ? pausedIndex : index;
 
   // Auto-scroll keeps the current line about a third of the way down the screen.
   const scrollRef = useRef<ScrollView>(null);
@@ -125,18 +127,24 @@ export default function PlayerScreen() {
       if (!line) return;
       manualUntil.current = 0; // let auto-scroll follow from the tapped line
       syncToLine(line.timeMs);
+      // While paused, the frozen highlight moves to the tapped line.
+      setPausedIndex((p) => (p === null ? null : i));
     },
     [synced]
   );
+  const togglePause = () => {
+    manualUntil.current = 0; // play jumps to the current line right away
+    setPausedIndex((p) => (p === null ? index : null));
+  };
   useEffect(() => {
     AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion).catch(() => {});
   }, []);
   useEffect(() => {
-    if (showPlain || scrollPaused || index < 0 || Date.now() < manualUntil.current) return;
-    const y = lineY.current[index];
+    if (showPlain || shownIndex < 0 || Date.now() < manualUntil.current) return;
+    const y = lineY.current[shownIndex];
     if (y == null) return;
     scrollRef.current?.scrollTo({ y: Math.max(0, y - viewportH * 0.33), animated: !reduceMotion });
-  }, [index, viewportH, reduceMotion, showPlain, scrollPaused]);
+  }, [shownIndex, viewportH, reduceMotion, showPlain]);
 
   if (!player) {
     return (
@@ -194,9 +202,9 @@ export default function PlayerScreen() {
               </Text>
             </Badge>
           )}
-          {scrollPaused && sync && synced && !showPlain && (
+          {paused && sync && synced && !showPlain && (
             <Badge variant="outline">
-              <Text>Auto-scroll paused</Text>
+              <Text>Paused</Text>
             </Badge>
           )}
           {versionMismatch && (
@@ -204,7 +212,6 @@ export default function PlayerScreen() {
               <Text>May be a different version</Text>
             </Badge>
           )}
-          {synced && <ViewToggle plain={showPlain} onChange={setShowPlain} />}
           {lyrics && lyricsStatus === 'found' && (
             <Pressable
               onPress={() => reportWrongVersion()}
@@ -219,6 +226,21 @@ export default function PlayerScreen() {
         </View>
       </View>
 
+      {synced && (
+        <View className="flex-row items-center justify-between px-5 pb-2">
+          <ViewToggle plain={showPlain} onChange={setShowPlain} />
+          {sync && !showPlain && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onPress={togglePause}
+              accessibilityLabel={paused ? 'Resume sync highlighting' : 'Pause sync highlighting'}>
+              <Icon as={paused ? Play : Pause} size={20} />
+            </Button>
+          )}
+        </View>
+      )}
+
       <ScrollView
         ref={scrollRef}
         className="flex-1"
@@ -230,7 +252,9 @@ export default function PlayerScreen() {
             key={`${line.timeMs}-${i}`}
             text={line.text}
             translation={translations?.[i]}
-            state={showPlain ? 'static' : !sync ? 'future' : i === index ? 'current' : i < index ? 'past' : 'future'}
+            state={
+              showPlain ? 'static' : !sync ? 'future' : i === shownIndex ? 'current' : i < shownIndex ? 'past' : 'future'
+            }
             index={i}
             onLineLayout={onLineLayout}
             onSelect={showPlain ? undefined : onSelectLine}
@@ -263,16 +287,6 @@ export default function PlayerScreen() {
         <View className="flex-row items-center gap-1">
           {synced && sync && !showPlain && (
             <>
-              <Button
-                variant="ghost"
-                size="icon"
-                onPress={() => {
-                  manualUntil.current = 0; // resuming jumps to the current line right away
-                  setScrollPaused((p) => !p);
-                }}
-                accessibilityLabel={scrollPaused ? 'Resume auto-scroll' : 'Pause auto-scroll'}>
-                <Icon as={scrollPaused ? Play : Pause} size={18} />
-              </Button>
               <Button
                 variant="ghost"
                 size="icon"
