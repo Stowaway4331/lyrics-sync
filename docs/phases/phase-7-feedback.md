@@ -11,7 +11,7 @@ From testing the Android development build. **Exit:** every item below works on 
 
 ## Features
 
-- [ ] 7.4 Toggle in the player to show the lyrics without sync (plain view)
+- [x] 7.4 Toggle in the player to show the lyrics without sync (plain view)
 - [ ] 7.5 Tap a lyric line to jump the sync to it; fine-tune with + / −
 - 7.6 ~~Translate with `@cf/meta/m2m100-1.2b`, supporting all 100 of its languages~~ — dropped 2026-09-25: translation stays on Llama 3.3
 - [x] 7.7 Chat shows a small loader while a reply is still streaming
@@ -43,3 +43,4 @@ From testing the Android development build. **Exit:** every item below works on 
 - 2026-09-25, item 7.2: chat uses `react-native-keyboard-controller`'s `KeyboardAvoidingView` (`behavior="padding"`, `automaticOffset`) on both platforms, per Expo's keyboard guide: with Android edge-to-edge the window no longer resizes for the keyboard, so React Native's own view left the input underneath. The tab bar hides while the keyboard is open. Native module: needs a new EAS build, then a check on the phone.
 - 2026-09-25, item 7.7: a small spinner stays under the assistant's reply until the stream ends (with the status text, e.g. "Checking the lyrics database…", before the first token). JS only, works in the current build; needs a check on the phone.
 - 2026-09-25, item 7.3: cause of the unreliable stop: recording waited on a fixed 10 s timer while "stop" called the recorder directly, so the timer later touched the recorder again. Now the wait ends on the timer *or* a stop signal, and the recorder is stopped exactly once. The big button (unchanged look) and the player's Resync button submit whatever was recorded; a separate Cancel (big screen) / × (player) discards it. The Worker accepts clips down to 0.5 s so the sync offset uses the real length; a 3 s clip on production returned a normal response. JS + Worker only; needs a check on the phone.
+- 2026-09-25, item 7.4: a Synced / Plain switch next to the status badges (only for songs with timed lyrics). Plain shows the same lines as static text, with no highlight, auto-scroll or nudge controls, and translations stay under their lines. The sync itself keeps running, so switching back resumes at the right line. JS only; needs a check on the phone.

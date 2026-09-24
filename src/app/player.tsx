@@ -53,6 +53,28 @@ const LyricLine = memo(function LyricLine({
   );
 });
 
+/** Synced / Plain switch for songs that have timed lyrics. */
+function ViewToggle({ plain, onChange }: { plain: boolean; onChange: (plain: boolean) => void }) {
+  return (
+    <View className="flex-row rounded-full border border-border p-0.5" accessibilityRole="radiogroup">
+      {(['Synced', 'Plain'] as const).map((label) => {
+        const selected = (label === 'Plain') === plain;
+        return (
+          <Pressable
+            key={label}
+            onPress={() => onChange(label === 'Plain')}
+            accessibilityRole="radio"
+            accessibilityState={{ checked: selected }}
+            hitSlop={6}
+            className={cn('rounded-full px-3 py-1', selected && 'bg-secondary')}>
+            <Text className={cn('text-xs font-medium', !selected && 'text-muted-foreground')}>{label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 export default function PlayerScreen() {
   const player = usePlayerStore((s) => s.player);
   const calibrationMs = usePlayerStore((s) => s.prefs.calibrationMs);
@@ -62,7 +84,14 @@ export default function PlayerScreen() {
   const plainText = player?.lyrics?.plain ?? null;
   const synced = useMemo(() => (syncedText ? parseLrc(syncedText) : null), [syncedText]);
   const plain = useMemo(() => (!synced && plainText ? plainLines(plainText) : null), [synced, plainText]);
-  const { index, positionMs } = useSyncClock(synced ?? [], player?.sync ?? null, player?.nudgeMs ?? 0, calibrationMs);
+  // Plain view: the same lines without timing, highlight or auto-scroll (translations stay aligned).
+  const [showPlain, setShowPlain] = useState(false);
+  const { index, positionMs } = useSyncClock(
+    showPlain ? [] : (synced ?? []),
+    player?.sync ?? null,
+    player?.nudgeMs ?? 0,
+    calibrationMs
+  );
 
   // Auto-scroll keeps the current line about a third of the way down the screen.
   const scrollRef = useRef<ScrollView>(null);
@@ -106,6 +135,7 @@ export default function PlayerScreen() {
   else if (!lyrics) status = 'No lyrics found';
   else if (lyrics.instrumental) status = 'Instrumental';
   else if (!synced) status = 'Lyrics not synced';
+  else if (showPlain) status = 'Plain view';
   else if (!sync) status = 'Listen to sync';
   else if (ended) status = 'Song ended';
   else status = `Synced · ${formatTime(positionMs)}`;
@@ -141,6 +171,7 @@ export default function PlayerScreen() {
               <Text>May be a different version</Text>
             </Badge>
           )}
+          {synced && <ViewToggle plain={showPlain} onChange={setShowPlain} />}
           {lyrics && lyricsStatus === 'found' && (
             <Pressable
               onPress={() => reportWrongVersion()}
@@ -166,7 +197,7 @@ export default function PlayerScreen() {
             key={`${line.timeMs}-${i}`}
             text={line.text}
             translation={translations?.[i]}
-            state={!sync ? 'future' : i === index ? 'current' : i < index ? 'past' : 'future'}
+            state={showPlain ? 'plain' : !sync ? 'future' : i === index ? 'current' : i < index ? 'past' : 'future'}
             onLayout={(e) => (lineY.current[i] = e.nativeEvent.layout.y)}
           />
         ))}
@@ -195,7 +226,7 @@ export default function PlayerScreen() {
           onCancel={recognizer.cancel}
         />
         <View className="flex-row items-center gap-1">
-          {synced && sync && (
+          {synced && sync && !showPlain && (
             <>
               <Button
                 variant="ghost"
