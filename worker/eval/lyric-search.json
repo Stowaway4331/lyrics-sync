@@ -1,0 +1,22 @@
+[
+  { "snippet": "is this the real life is this just fantasy", "title": "Bohemian Rhapsody", "artist": "Queen" },
+  { "snippet": "hello from the other side", "title": "Hello", "artist": "Adele" },
+  { "snippet": "just a small town girl living in a lonely world", "title": "Don't Stop Believin'", "artist": "Journey" },
+  { "snippet": "i'm in love with the shape of you", "title": "Shape of You", "artist": "Ed Sheeran" },
+  { "snippet": "we will we will rock you", "title": "We Will Rock You", "artist": "Queen" },
+  { "snippet": "yesterday all my troubles seemed so far away", "title": "Yesterday", "artist": "The Beatles" },
+  { "snippet": "cause baby you're a firework", "title": "Firework", "artist": "Katy Perry" },
+  { "snippet": "i got my red dress on tonight dancing in the dark", "title": "Blinding Lights", "artist": "The Weeknd", "note": "wrong: mixed-up lyrics, expect a miss" },
+  { "snippet": "i've been reading books of old the legends and the myths", "title": "Something Just Like This", "artist": "The Chainsmokers" },
+  { "snippet": "never gonna give you up never gonna let you down", "title": "Never Gonna Give You Up", "artist": "Rick Astley" },
+  { "snippet": "somebody once told me the world is gonna roll me", "title": "All Star", "artist": "Smash Mouth" },
+  { "snippet": "and i will always love you", "title": "I Will Always Love You", "artist": "Whitney Houston" },
+  { "snippet": "scaramouche scaramouche will you do the fandango", "title": "Bohemian Rhapsody", "artist": "Queen" },
+  { "snippet": "hold me closer tony danza", "title": "Tiny Dancer", "artist": "Elton John", "note": "misheard lyric" },
+  { "snippet": "rolling in the deep you had my heart inside your hand", "title": "Rolling in the Deep", "artist": "Adele" },
+  { "snippet": "despacito quiero respirar tu cuello despacito", "title": "Despacito", "artist": "Luis Fonsi" },
+  { "snippet": "oppa gangnam style", "title": "Gangnam Style", "artist": "PSY" },
+  { "snippet": "load up on guns bring your friends", "title": "Smells Like Teen Spirit", "artist": "Nirvana" },
+  { "snippet": "i see a red door and i want it painted black", "title": "Paint It Black", "artist": "The Rolling Stones" },
+  { "snippet": "baby shark doo doo doo doo doo doo", "title": "Baby Shark", "artist": "Pinkfong" }
+]
