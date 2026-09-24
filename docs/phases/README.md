@@ -12,3 +12,4 @@ Each checklist item is delivered in its own commit, which also ticks its box her
 | 4 — Translation | [phase-4-translation.md](phase-4-translation.md) |
 | 5 — Chat | [phase-5-chat.md](phase-5-chat.md) |
 | 6 — Polish and deploy | [phase-6-polish-deploy.md](phase-6-polish-deploy.md) |
+| 7 — Device feedback | [phase-7-feedback.md](phase-7-feedback.md) |
