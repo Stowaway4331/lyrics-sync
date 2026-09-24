@@ -17,6 +17,8 @@ export interface HistoryEntry extends Song {
 
 export interface Prefs {
   targetLanguage: string | null;
+  /** Languages this user picked before, most relevant first. */
+  languages: string[];
   calibrationMs: number;
 }
 
@@ -58,6 +60,9 @@ export class UserSession extends DurableObject<Env> {
         result_json TEXT, error TEXT, updated_at INTEGER NOT NULL
       );
       CREATE TABLE IF NOT EXISTS rate_events (kind TEXT NOT NULL, at INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS language_usage (
+        lang TEXT PRIMARY KEY, count INTEGER NOT NULL, last_used INTEGER NOT NULL
+      );
     `);
   }
 
@@ -160,11 +165,35 @@ export class UserSession extends DurableObject<Env> {
     const map = new Map(rows.map((r) => [r.key, r.value]));
     return {
       targetLanguage: map.get('target_language') ?? null,
+      languages: this.rankedLanguages(),
       calibrationMs: Number(map.get('calibration_ms') ?? 0),
     };
   }
 
-  setPrefs(prefs: Partial<Prefs>): Prefs {
+  /** Counts an explicit language choice (picker or chat), not automatic translations. */
+  recordLanguage(lang: string): void {
+    this.sql.exec(
+      'INSERT INTO language_usage (lang, count, last_used) VALUES (?, 1, ?) ON CONFLICT(lang) DO UPDATE SET count = count + 1, last_used = excluded.last_used',
+      lang,
+      Date.now()
+    );
+  }
+
+  /**
+   * Languages ranked by relevance: how often each was picked, discounted by how
+   * long ago it was last used (a pick loses half its weight after two weeks).
+   */
+  rankedLanguages(): string[] {
+    const now = Date.now();
+    return this.sql
+      .exec<{ lang: string; count: number; last_used: number }>('SELECT lang, count, last_used FROM language_usage')
+      .toArray()
+      .map((r) => ({ lang: r.lang, score: r.count / (1 + (now - r.last_used) / (14 * 24 * 3600_000)) }))
+      .sort((a, b) => b.score - a.score)
+      .map((r) => r.lang);
+  }
+
+  setPrefs(prefs: Partial<Omit<Prefs, 'languages'>>): Prefs {
     const upsert = (key: string, value: string) =>
       this.sql.exec('INSERT INTO prefs (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', key, value);
     if (prefs.targetLanguage !== undefined) {

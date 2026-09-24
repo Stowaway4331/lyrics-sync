@@ -38,6 +38,8 @@ export interface ChatMessage {
 
 export interface Prefs {
   targetLanguage: string | null;
+  /** Languages this user picked before, most relevant first. */
+  languages: string[];
   calibrationMs: number;
 }
 

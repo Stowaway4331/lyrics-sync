@@ -310,6 +310,7 @@ async function chat(req: Request, env: Env, ctx: ExecutionContext, deviceId: str
             notes.push('The user wants a translation but did not say which language. Ask which language.');
           } else {
             await session.setPrefs({ targetLanguage: lang });
+            await session.recordLanguage(lang);
             const state = await ensureTranslation(env, session, deviceId, currentSong.lrclibId, lang);
             await send(
               state.status === 'complete'
@@ -450,6 +451,9 @@ async function handle(req: Request, env: Env, ctx: ExecutionContext): Promise<Re
   if (route === 'GET /prefs') return json(await session.getPrefs());
   if (route === 'PUT /prefs') {
     const body = await readJson<{ targetLanguage?: string | null; calibrationMs?: number }>(req);
+    // The app sends targetLanguage only when the user picks one, so this is an explicit choice.
+    const picked = body.targetLanguage?.trim();
+    if (picked) await session.recordLanguage(picked);
     return json(
       await session.setPrefs({
         ...(body.targetLanguage !== undefined ? { targetLanguage: body.targetLanguage?.trim() || null } : {}),

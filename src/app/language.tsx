@@ -9,14 +9,30 @@ import { Text } from '@/components/ui/text';
 import { LANGUAGES } from '@/lib/languages';
 import { setTranslationLanguage, usePlayerStore } from '@/lib/player-store';
 
+type Row = { kind: 'header'; title: string } | { kind: 'lang'; lang: string };
+
 export default function LanguageScreen() {
   const current = usePlayerStore((s) => s.prefs.targetLanguage);
+  const mine = usePlayerStore((s) => s.prefs.languages);
   const [query, setQuery] = useState('');
-  const options = useMemo(() => {
+
+  // The user's own languages (most relevant first), then everything else by global usage.
+  const rows = useMemo((): Row[] => {
     const q = query.trim().toLowerCase();
-    const list: string[] = LANGUAGES.filter((l) => l.toLowerCase().includes(q));
-    return q ? list : ['Off', ...list];
-  }, [query]);
+    const matches = (l: string) => l.toLowerCase().includes(q);
+    const yours = mine.filter(matches);
+    const rest = LANGUAGES.filter((l) => matches(l) && !yours.includes(l));
+    const out: Row[] = [];
+    if (!q) out.push({ kind: 'lang', lang: 'Off' });
+    if (yours.length) {
+      out.push({ kind: 'header', title: 'Your languages' });
+      yours.forEach((lang) => out.push({ kind: 'lang', lang }));
+      if (rest.length) out.push({ kind: 'header', title: 'All languages' });
+    }
+    rest.forEach((lang) => out.push({ kind: 'lang', lang }));
+    return out;
+  }, [query, mine]);
+  const firstMatch = rows.find((r): r is Extract<Row, { kind: 'lang' }> => r.kind === 'lang' && r.lang !== 'Off');
 
   const choose = (lang: string) => {
     void setTranslationLanguage(lang === 'Off' ? null : lang);
@@ -33,14 +49,21 @@ export default function LanguageScreen() {
           accessibilityLabel="Search languages"
           autoCorrect={false}
           returnKeyType="done"
-          onSubmitEditing={() => options[0] && query && choose(options[0])}
+          onSubmitEditing={() => firstMatch && query && choose(firstMatch.lang)}
         />
       </View>
       <FlatList
-        data={options}
-        keyExtractor={(l) => l}
+        data={rows}
+        keyExtractor={(r) => (r.kind === 'header' ? `h:${r.title}` : r.lang)}
         keyboardShouldPersistTaps="handled"
-        renderItem={({ item }) => {
+        renderItem={({ item: row }) => {
+          if (row.kind === 'header')
+            return (
+              <Text variant="muted" className="px-4 pb-1 pt-4 text-xs font-medium uppercase tracking-wide" role="heading">
+                {row.title}
+              </Text>
+            );
+          const item = row.lang;
           const selected = item === 'Off' ? current == null : item === current;
           return (
             <Pressable

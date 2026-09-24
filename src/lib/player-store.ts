@@ -28,7 +28,7 @@ interface State {
   prefs: api.Prefs;
 }
 
-let state: State = { player: null, prefs: { targetLanguage: null, calibrationMs: 0 } };
+let state: State = { player: null, prefs: { targetLanguage: null, languages: [], calibrationMs: 0 } };
 const subscribers = new Set<() => void>();
 
 function set(update: (s: State) => State) {
@@ -139,20 +139,30 @@ export async function reportWrongVersion(jobId?: string) {
   }
 }
 
+/** Moves a just-picked language to the front locally; the server keeps the real ranking. */
+function pickLanguage(lang: string) {
+  set((s) => ({
+    ...s,
+    prefs: { ...s.prefs, targetLanguage: lang, languages: [lang, ...s.prefs.languages.filter((l) => l !== lang)] },
+  }));
+}
+
 /** Sets the translation language (null = off) and translates the current song. */
 export async function setTranslationLanguage(lang: string | null) {
-  set((s) => ({ ...s, prefs: { ...s.prefs, targetLanguage: lang } }));
   if (!lang) {
+    set((s) => ({ ...s, prefs: { ...s.prefs, targetLanguage: null } }));
     setPlayer((p) => ({ ...p, translation: null }));
     void api.putPrefs({ targetLanguage: null }).catch(() => {});
     return;
   }
+  pickLanguage(lang);
+  void api.putPrefs({ targetLanguage: lang }).catch(() => {});
   await requestTranslation(lang);
 }
 
 /** Applies a translation the chat already started or found in cache. */
 export async function applyChatTranslation(lang: string, jobId?: string, lines?: string[]) {
-  set((s) => ({ ...s, prefs: { ...s.prefs, targetLanguage: lang } }));
+  pickLanguage(lang);
   if (lines) setPlayer((p) => ({ ...p, translation: { lang, status: 'complete', lines } }));
   else if (jobId) await followTranslation(lang, jobId);
 }
