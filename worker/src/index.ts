@@ -140,6 +140,19 @@ async function findLyricsFast(env: Env, song: Song): Promise<Lyrics | null> {
 interface ChatBody {
   message?: string;
   currentSong?: Song | null;
+  /** Recent messages of the thread, oldest first. Threads live on the device, not here. */
+  history?: { role?: string; content?: string }[];
+}
+
+const HISTORY_LIMIT = 20;
+const HISTORY_MESSAGE_CHARS = 4000;
+
+function cleanHistory(history: ChatBody['history']): Message[] {
+  if (!Array.isArray(history)) return [];
+  return history
+    .filter((m) => (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && m.content.trim())
+    .slice(-HISTORY_LIMIT)
+    .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content!.slice(0, HISTORY_MESSAGE_CHARS) }));
 }
 
 async function verifyCandidates(
@@ -203,8 +216,7 @@ async function chat(req: Request, env: Env, ctx: ExecutionContext, deviceId: str
     let reply = '';
     let cards: SongCard[] = [];
     try {
-      const history: Message[] = (await session.listMessages(20)).map((m) => ({ role: m.role, content: m.content }));
-      await session.addMessage('user', message);
+      const history = cleanHistory(body.history);
 
       await send({ type: 'status', text: 'Thinking…' });
       const route = await routeChat(env.AI, message, history, currentSong).catch((e): ChatRoute => {
@@ -280,7 +292,6 @@ async function chat(req: Request, env: Env, ctx: ExecutionContext, deviceId: str
       if (!reply) reply = text;
       await send({ type: 'error', message: text });
     } finally {
-      if (reply) await session.addMessage('assistant', reply, cards);
       await send({ type: 'done' });
       await writer.close();
     }
@@ -373,6 +384,7 @@ async function handle(req: Request, env: Env, ctx: ExecutionContext): Promise<Re
     await session.clearAll();
     return json({ ok: true });
   }
+  // Chats used to be stored here; the app imports this once into its on-device threads.
   if (route === 'GET /chat/history') return json({ messages: await session.listMessages() });
   if (route === 'GET /prefs') return json(await session.getPrefs());
   if (route === 'PUT /prefs') {

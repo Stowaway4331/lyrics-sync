@@ -131,12 +131,18 @@ export type ChatEvent =
 export async function streamChat(
   message: string,
   currentSong: Song | null,
+  history: Pick<ChatMessage, 'role' | 'content'>[],
   onEvent: (event: ChatEvent) => void
 ): Promise<void> {
   const res = await fetch(`${API_URL}/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Device-Id': await getDeviceId() },
-    body: JSON.stringify({ message, currentSong }),
+    // Threads live on the device, so the recent conversation goes with each message.
+    body: JSON.stringify({
+      message,
+      currentSong,
+      history: history.slice(-20).map(({ role, content }) => ({ role, content })),
+    }),
   }).catch(() => {
     throw new ApiError(0, "Can't reach the server. Check your connection.");
   });

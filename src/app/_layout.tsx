@@ -35,6 +35,7 @@ export default function RootLayout() {
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="player" options={{ title: '' }} />
           <Stack.Screen name="language" options={{ presentation: 'modal', title: 'Translate to' }} />
+          <Stack.Screen name="threads" options={{ presentation: 'modal', title: 'Chats' }} />
         </Stack>
         <PortalHost />
       </ThemeProvider>

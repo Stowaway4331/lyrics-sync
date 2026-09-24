@@ -1,5 +1,5 @@
-import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowUp, X } from 'lucide-react-native';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
+import { ArrowUp, MessagesSquare, SquarePen, X } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -20,7 +20,8 @@ import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Text } from '@/components/ui/text';
 import { Textarea } from '@/components/ui/textarea';
-import { getChatHistory, streamChat, type ChatMessage, type Song, type SongCard } from '@/lib/api';
+import { streamChat, type ChatMessage, type Song, type SongCard } from '@/lib/api';
+import { currentThread, loadChats, saveMessages, startNewChat, useChatStore } from '@/lib/chat-store';
 import { applyChatTranslation, getPlayer, openSong, reportWrongVersion } from '@/lib/player-store';
 import { usePlaceholderColor } from '@/lib/theme';
 import { cn } from '@/lib/utils';
@@ -113,7 +114,16 @@ function useKeyboardSpacer() {
 
 export default function ChatScreen() {
   const { about } = useLocalSearchParams<{ about?: string }>();
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const currentId = useChatStore((s) => s.currentId);
+  const loaded = useChatStore((s) => s.loaded);
+  const [messages, setMessagesState] = useState<ChatMessage[]>([]);
+  // Mirror of `messages` so the stream's end can save the final state.
+  const messagesRef = useRef<ChatMessage[]>([]);
+  const setMessages = useCallback((fn: (m: ChatMessage[]) => ChatMessage[]) => {
+    messagesRef.current = fn(messagesRef.current);
+    setMessagesState(messagesRef.current);
+  }, []);
+  const threadRef = useRef<string | null>(null);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -122,19 +132,27 @@ export default function ChatScreen() {
   const keyboardSpacer = useKeyboardSpacer();
 
   useEffect(() => {
-    getChatHistory()
-      .then((history) => setMessages((m) => (m.length ? m : history)))
-      .catch(() => {});
+    void loadChats();
   }, []);
+
+  // Show the current thread (after loading, "New chat" or picking one from the list).
+  useEffect(() => {
+    if (!loaded || threadRef.current === currentId) return;
+    threadRef.current = currentId;
+    setMessages(() => currentThread()?.messages ?? []);
+  }, [loaded, currentId, setMessages]);
 
   // Opened from the player: questions like "translate this" refer to that song.
   useEffect(() => {
     if (about === 'current') setAboutSong(getPlayer()?.song ?? null);
   }, [about]);
 
-  const updateLast = useCallback((fn: (m: ChatMessage) => ChatMessage) => {
-    setMessages((all) => [...all.slice(0, -1), fn(all[all.length - 1])]);
-  }, []);
+  const updateLast = useCallback(
+    (fn: (m: ChatMessage) => ChatMessage) => {
+      setMessages((all) => [...all.slice(0, -1), fn(all[all.length - 1])]);
+    },
+    [setMessages]
+  );
 
   const send = async (text = input) => {
     const message = text.trim();
@@ -142,13 +160,14 @@ export default function ChatScreen() {
     setInput('');
     setSending(true);
     const stamp = Date.now();
-    setMessages((m) => [
-      ...m,
-      { id: `u${stamp}`, role: 'user', content: message, cards: [] },
-      { id: `a${stamp}`, role: 'assistant', content: '', cards: [] },
-    ]);
+    const history = messagesRef.current;
+    setMessages((m) => [...m, { id: `u${stamp}`, role: 'user', content: message, cards: [] }]);
+    // Saved right away so the question survives the app closing mid-reply.
+    const threadId = saveMessages(threadRef.current, messagesRef.current);
+    threadRef.current = threadId;
+    setMessages((m) => [...m, { id: `a${stamp}`, role: 'assistant', content: '', cards: [] }]);
     try {
-      await streamChat(message, aboutSong, (event) => {
+      await streamChat(message, aboutSong, history, (event) => {
         switch (event.type) {
           case 'status':
             setStatus(event.text);
@@ -174,7 +193,14 @@ export default function ChatScreen() {
     } finally {
       setSending(false);
       setStatus(null);
+      // Only save into the thread this reply belongs to (the user may have switched meanwhile).
+      if (threadRef.current === threadId) saveMessages(threadId, messagesRef.current);
     }
+  };
+
+  const onNewChat = () => {
+    if (sending) return;
+    startNewChat();
   };
 
   // Enter sends on web; Shift+Enter adds a new line.
@@ -189,6 +215,24 @@ export default function ChatScreen() {
     // With Android edge-to-edge the window no longer resizes for the keyboard, so a spacer
     // under the composer grows with the keyboard (frame by frame) and pushes it up.
     <View className="flex-1 bg-background">
+      <Stack.Screen
+        options={{
+          headerRight: () => (
+            <View className="mr-2 flex-row">
+              <Button
+                variant="ghost"
+                size="icon"
+                onPress={() => router.push('/threads')}
+                accessibilityLabel="Chat history">
+                <Icon as={MessagesSquare} size={20} />
+              </Button>
+              <Button variant="ghost" size="icon" onPress={onNewChat} disabled={sending} accessibilityLabel="New chat">
+                <Icon as={SquarePen} size={20} />
+              </Button>
+            </View>
+          ),
+        }}
+      />
       <View className="flex-1">
         <FlatList
           ref={listRef}
