@@ -3,7 +3,7 @@
 **Exit:** a decision note is recorded; `wrangler dev` serves a hello route.
 
 - [x] 0.1 Check current docs for every external API and record the decisions below
-- [ ] 0.2 Set up NativeWind, React Native Reusables and app dependencies
+- [x] 0.2 Set up NativeWind, React Native Reusables and app dependencies
 - [ ] 0.3 Scaffold the Worker (`worker/`) with AI, KV, Durable Object and Workflow bindings
 
 ## Decision note (checked 2026-09-24)
