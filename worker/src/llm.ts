@@ -205,9 +205,7 @@ Always fill candidates for "title" and "lyrics" (an empty list only if you have 
         : [];
       const action = v.action === 'translate' || v.action === 'wrong_version' ? v.action : null;
       const language = typeof v.language === 'string' && v.language.trim() ? v.language.trim() : null;
-      // Llama sometimes leaves stray quotes/commas at the edges of the snippet.
-      const snippet =
-        typeof v.snippet === 'string' ? v.snippet.replace(/^[s"'“”‘’,.]+|[s"'“”‘’,.]+$/g, '') || null : null;
+      const snippet = typeof v.snippet === 'string' ? cleanSnippet(v.snippet) : null;
       return { intent: v.intent as ChatIntent, candidates, action, language, snippet };
     },
     { temperature: 0 }
@@ -250,3 +248,8 @@ export async function* streamReply(ai: Ai, messages: Message[]): AsyncGenerator<
 }
 
 export type { Message };
+
+/** Llama sometimes leaves stray quotes, commas or spaces at the edges of the snippet. */
+export function cleanSnippet(raw: string): string | null {
+  return raw.replace(/^[\s"'“”‘’,.]+|[\s"'“”‘’,.]+$/g, '') || null;
+}

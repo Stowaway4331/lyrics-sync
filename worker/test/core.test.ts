@@ -147,3 +147,14 @@ describe('pre-translation targets', () => {
     expect(looksEnglish(spanish)).toBe(false);
   });
 });
+
+describe('cleanSnippet', () => {
+  it('trims stray quotes and commas but keeps letters', async () => {
+    const { cleanSnippet } = await import('../src/llm');
+    expect(cleanSnippet('hello from the other side, i must have called a thousand times”,')).toBe(
+      'hello from the other side, i must have called a thousand times'
+    );
+    expect(cleanSnippet('"so sick of love songs"')).toBe('so sick of love songs');
+    expect(cleanSnippet(' ", ')).toBeNull();
+  });
+});
