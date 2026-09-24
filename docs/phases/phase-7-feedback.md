@@ -7,7 +7,7 @@ From testing the Android development build. **Exit:** every item below works on 
 - [x] 7.1 Chat box placeholder text follows the theme (it stays black in dark mode)
 - [x] 7.2 Chat box stays above the keyboard while typing (the keyboard currently covers it)
 - [x] 7.8 No white flash when switching screens in dark mode
-- [ ] 7.3 Big listen button submits the clip early at any length instead of stopping; a separate Cancel button discards it (tap-to-stop is unreliable today)
+- [x] 7.3 Big listen button submits the clip early at any length instead of stopping; a separate Cancel button discards it (tap-to-stop is unreliable today)
 
 ## Features
 
@@ -42,3 +42,4 @@ From testing the Android development build. **Exit:** every item below works on 
 - 2026-09-25, item 7.13: "Wrong version" (player button or chat) deletes that lyrics version's KV translations still tagged `prefetched` and terminates this user's pre-translation jobs for it that are still running; translations someone explicitly asked for are kept. Production check on "Alors On Danse": before, Chinese (Simplified) tagged `prefetched` plus English, German and Hindi requested explicitly; after the report, only English, German and Hindi remained. Limitation: finished Workflow runs keep their output (no delete API), so a later request for that exact rejected version and language can still be answered from it.
 - 2026-09-25, item 7.2: chat uses `react-native-keyboard-controller`'s `KeyboardAvoidingView` (`behavior="padding"`, `automaticOffset`) on both platforms, per Expo's keyboard guide: with Android edge-to-edge the window no longer resizes for the keyboard, so React Native's own view left the input underneath. The tab bar hides while the keyboard is open. Native module: needs a new EAS build, then a check on the phone.
 - 2026-09-25, item 7.7: a small spinner stays under the assistant's reply until the stream ends (with the status text, e.g. "Checking the lyrics database…", before the first token). JS only, works in the current build; needs a check on the phone.
+- 2026-09-25, item 7.3: cause of the unreliable stop: recording waited on a fixed 10 s timer while "stop" called the recorder directly, so the timer later touched the recorder again. Now the wait ends on the timer *or* a stop signal, and the recorder is stopped exactly once. The big button (unchanged look) and the player's Resync button submit whatever was recorded; a separate Cancel (big screen) / × (player) discards it. The Worker accepts clips down to 0.5 s so the sync offset uses the real length; a 3 s clip on production returned a normal response. JS + Worker only; needs a check on the phone.

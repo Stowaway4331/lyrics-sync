@@ -10,11 +10,11 @@ import { CLIP_MS } from '@/lib/config';
 import { usePlayerStore } from '@/lib/player-store';
 
 export default function ListenScreen() {
-  const { phase, error, startedAt, listen, cancel, reset } = useRecognizer();
+  const { phase, error, startedAt, listen, submit, cancel, reset } = useRecognizer();
   const current = usePlayerStore((s) => s.player?.song ?? null);
 
   const onPress = async () => {
-    if (phase === 'recording') return cancel();
+    if (phase === 'recording') return submit();
     const outcome = await listen();
     if (outcome === 'matched') router.push('/player');
   };
@@ -29,7 +29,7 @@ export default function ListenScreen() {
 
   const hint = {
     idle: `Hold your phone near the music. It takes about ${Math.round(CLIP_MS / 1000)} seconds.`,
-    recording: 'Keep the music playing. Tap to stop.',
+    recording: 'Keep the music playing. Tap the button to identify now.',
     identifying: 'Finding the song and its lyrics.',
     no_match: 'Try again closer to the speaker, or search by lyrics in chat.',
     error: error?.message ?? 'Please try again.',
@@ -38,7 +38,7 @@ export default function ListenScreen() {
   return (
     <View className="flex-1 bg-background">
       <View className="flex-1 items-center justify-center gap-8 px-6">
-        <ListenButton phase={phase} startedAt={startedAt} onPress={onPress} />
+        <ListenButton phase={phase} startedAt={startedAt} onPress={onPress} onCancel={cancel} />
         <View className="items-center gap-2" accessibilityLiveRegion="polite">
           <Text className="text-center text-xl font-semibold">{heading}</Text>
           <Text variant="muted" className="max-w-xs text-center">

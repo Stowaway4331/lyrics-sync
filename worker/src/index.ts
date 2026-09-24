@@ -51,7 +51,8 @@ async function recognize(req: Request, env: Env, ctx: ExecutionContext, deviceId
   const session = sessionOf(env, deviceId);
   await limit(session, 'recognize');
 
-  const clipMs = Math.min(20_000, Math.max(1000, Number(req.headers.get('X-Clip-Ms')) || 10_000));
+  // Real clip length (the user can submit early); it feeds the sync offset, so keep it accurate.
+  const clipMs = Math.min(20_000, Math.max(500, Number(req.headers.get('X-Clip-Ms')) || 10_000));
   const audio = await req.arrayBuffer();
   if (audio.byteLength === 0) throw new HttpError(400, 'Empty audio');
   if (audio.byteLength >= MAX_SAMPLE_BYTES) throw new HttpError(413, 'Audio clip too large (max 5 MB)');

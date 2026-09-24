@@ -29,6 +29,8 @@ export function useRecognizer() {
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const busy = useRef(false);
   const cancelled = useRef(false);
+  /** Ends the recording wait early (submit or cancel). Set only while recording. */
+  const stopWaiting = useRef<(() => void) | null>(null);
 
   const listen = useCallback(async (): Promise<'matched' | 'no_match' | 'error' | 'cancelled'> => {
     if (busy.current) return 'cancelled';
@@ -49,7 +51,16 @@ export function useRecognizer() {
       setStartedAt(start);
       setPhase('recording');
 
-      await new Promise((r) => setTimeout(r, CLIP_MS));
+      // Wait for the full clip, or until the user submits early or cancels. The recorder is
+      // stopped exactly once, below.
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, CLIP_MS);
+        stopWaiting.current = () => {
+          clearTimeout(timer);
+          resolve();
+        };
+      });
+      stopWaiting.current = null;
       const measured = recorder.getStatus().durationMillis;
       const stoppedAt = now();
       await recorder.stop();
@@ -80,16 +91,21 @@ export function useRecognizer() {
     }
   }, [recorder]);
 
-  /** Stops early and discards the clip. */
-  const cancel = useCallback(async () => {
+  /** Stops now and identifies what was recorded so far, whatever its length. */
+  const submit = useCallback(() => {
+    stopWaiting.current?.();
+  }, []);
+
+  /** Stops now and discards the clip. */
+  const cancel = useCallback(() => {
     cancelled.current = true;
-    if (recorder.isRecording) await recorder.stop().catch(() => {});
-  }, [recorder]);
+    stopWaiting.current?.();
+  }, []);
 
   const reset = useCallback(() => {
     setPhase('idle');
     setError(null);
   }, []);
 
-  return { phase, error, startedAt, listen, cancel, reset };
+  return { phase, error, startedAt, listen, submit, cancel, reset };
 }

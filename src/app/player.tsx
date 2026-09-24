@@ -97,7 +97,7 @@ export default function PlayerScreen() {
   const translations = translation?.status === 'complete' ? translation.lines : null;
 
   const onResync = async () => {
-    if (recognizer.phase === 'recording') return recognizer.cancel();
+    if (recognizer.phase === 'recording') return recognizer.submit();
     await recognizer.listen();
   };
 
@@ -187,7 +187,13 @@ export default function PlayerScreen() {
       </ScrollView>
 
       <View className="flex-row items-center justify-between gap-2 border-t border-border px-4 py-3">
-        <ListenButton size="sm" phase={recognizer.phase} startedAt={recognizer.startedAt} onPress={onResync} />
+        <ListenButton
+          size="sm"
+          phase={recognizer.phase}
+          startedAt={recognizer.startedAt}
+          onPress={onResync}
+          onCancel={recognizer.cancel}
+        />
         <View className="flex-row items-center gap-1">
           {synced && sync && (
             <>
