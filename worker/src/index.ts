@@ -11,7 +11,7 @@ import {
   SNIPPET_MATCH_THRESHOLD,
   titleMatches,
 } from './match';
-import { ensureTranslation, prefetchTranslations } from './translations';
+import { discardPrefetched, ensureTranslation, prefetchTranslations } from './translations';
 import type { JobUpdate, Lyrics, Song, SongCard } from './types';
 
 export { LyricsPipeline } from './pipeline';
@@ -250,6 +250,7 @@ async function chat(req: Request, env: Env, ctx: ExecutionContext, deviceId: str
             track: currentSong,
             excludeIds: [currentSong.lrclibId],
           });
+          ctx.waitUntil(discardPrefetched(env, session, currentSong.lrclibId));
           await send({ type: 'action', action: 'wrong_version', jobId });
           notes.push('The app is now searching for a different version of the lyrics. Confirm briefly.');
         }
@@ -341,6 +342,7 @@ async function handle(req: Request, env: Env, ctx: ExecutionContext): Promise<Re
       track: song,
       excludeIds: (excludeIds ?? []).filter(Number.isInteger),
     });
+    for (const id of (excludeIds ?? []).filter(Number.isInteger)) ctx.waitUntil(discardPrefetched(env, session, id));
     return json({ status: 'running', jobId });
   }
 

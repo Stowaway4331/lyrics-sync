@@ -22,7 +22,7 @@ From testing the Android development build. **Exit:** every item below works on 
 - [x] 7.10 Language list sorted by global usage, from one constants file shared by the app and the Worker
 - [x] 7.11 Remember each user's language choices and list those first, most relevant first
 - [x] 7.12 Silently pre-translate each song into the user's top 3 languages
-- [ ] 7.13 "Wrong version" discards the pre-translations made for that lyrics version
+- [x] 7.13 "Wrong version" discards the pre-translations made for that lyrics version
 
 ## Notes
 
@@ -39,3 +39,4 @@ From testing the Android development build. **Exit:** every item below works on 
 - 2026-09-25, item 7.11: explicit picks (language picker, "translate to X" in chat) are counted per user in the `UserSession` Durable Object; relevance = picks ÷ (1 + weeks-since-last-use ÷ 2). `GET /prefs` returns `languages` in that order, and the picker lists them under "Your languages" above "All languages". Production check: Korean once then Spanish twice → `["Spanish","Korean"]`.
 - 2026-09-25, item 7.12: recognising a song, opening one from history or chat, or recovery finding lyrics silently starts translations into the user's top 3 languages (their ranked picks, topped up from the global order), skipping the song's own language (ACRCloud's `language`, else an English word check). Pre-translations are tagged `prefetched` in KV until someone asks for one, and have their own limit (60 songs/hour/device). Production check: a new device opened "Alors On Danse" → jobs for English, Chinese (Simplified) and Hindi started; picking Hindi afterwards returned the finished lines immediately. Helpers moved to `worker/src/jobs.ts` and `worker/src/translations.ts`; 18/18 tests pass.
 - 2026-09-25, item 7.1: `Input` and `Textarea` now pass `placeholderTextColor` from the theme (`#737373` light / `#a3a3a3` dark) instead of relying on the class-based placeholder colour, which stayed black in dark mode on Android. Needs a check on the phone.
+- 2026-09-25, item 7.13: "Wrong version" (player button or chat) deletes that lyrics version's KV translations still tagged `prefetched` and terminates this user's pre-translation jobs for it that are still running; translations someone explicitly asked for are kept. Production check on "Alors On Danse": before, Chinese (Simplified) tagged `prefetched` plus English, German and Hindi requested explicitly; after the report, only English, German and Hindi remained. Limitation: finished Workflow runs keep their output (no delete API), so a later request for that exact rejected version and language can still be answered from it.

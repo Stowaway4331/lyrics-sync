@@ -63,14 +63,21 @@ const PREFETCH_COUNT = 3;
  */
 export function prefetchTargets(userLanguages: string[], songLanguage: string | null): string[] {
   const source = songLanguage?.toLowerCase() ?? null;
+  return topLanguages(userLanguages, PREFETCH_COUNT + 1)
+    .filter((lang) => lang.toLowerCase() !== source)
+    .slice(0, PREFETCH_COUNT);
+}
+
+/** The user's languages (most relevant first), topped up from the global order, without duplicates. */
+function topLanguages(userLanguages: string[], count: number): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
   for (const lang of [...userLanguages, ...LANGUAGES]) {
     const key = lang.toLowerCase();
-    if (seen.has(key) || key === source) continue;
+    if (seen.has(key)) continue;
     seen.add(key);
     out.push(lang);
-    if (out.length === PREFETCH_COUNT) break;
+    if (out.length === count) break;
   }
   return out;
 }
@@ -102,5 +109,31 @@ export async function prefetchTranslations(
     );
   } catch (e) {
     console.error('prefetch failed', e);
+  }
+}
+
+/**
+ * "Wrong version": drops the pre-translations of a rejected lyrics version.
+ * Deletes cached translations nobody asked for, and stops this user's
+ * pre-translation jobs for it that are still running. Never throws.
+ */
+export async function discardPrefetched(env: Env, session: Session, lrclibId: number): Promise<void> {
+  try {
+    const listed = await env.CACHE.list<{ prefetched?: boolean }>({ prefix: `translation:${lrclibId}:` });
+    const stale = listed.keys.filter((k) => k.metadata?.prefetched === true).map((k) => k.name);
+    await Promise.all(stale.map((name) => env.CACHE.delete(name)));
+
+    // Every language prefetch could have picked for this user (one extra covers a skipped song language).
+    const { languages } = await session.getPrefs();
+    await Promise.all(
+      topLanguages(languages, PREFETCH_COUNT + 1).map(async (lang) => {
+        const id = translationJobId(lrclibId, lang);
+        const status = await instanceStatus(env, id);
+        if (status && ACTIVE.includes(status.status)) await (await env.PIPELINE.get(id)).terminate();
+      })
+    );
+    console.log('discarded pre-translations', lrclibId, { deleted: stale.length });
+  } catch (e) {
+    console.error('discard failed', lrclibId, e);
   }
 }
