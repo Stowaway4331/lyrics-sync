@@ -2,6 +2,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowUp, X } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   FlatList,
   Platform,
   Pressable,
@@ -9,7 +10,6 @@ import {
   type NativeSyntheticEvent,
   type TextInputKeyPressEventData,
 } from 'react-native';
-
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 
 import { SongRow } from '@/components/song-row';
@@ -19,6 +19,7 @@ import { Text } from '@/components/ui/text';
 import { Textarea } from '@/components/ui/textarea';
 import { getChatHistory, streamChat, type ChatMessage, type Song, type SongCard } from '@/lib/api';
 import { applyChatTranslation, getPlayer, openSong, reportWrongVersion } from '@/lib/player-store';
+import { usePlaceholderColor } from '@/lib/theme';
 import { cn } from '@/lib/utils';
 
 const SUGGESTIONS = [
@@ -66,6 +67,20 @@ function CardList({ cards }: { cards: SongCard[] }) {
           {"Couldn't open the lyrics. Try again."}
         </Text>
       )}
+    </View>
+  );
+}
+
+/** Shown while the reply is still arriving, so a pause between tokens doesn't look finished. */
+function StreamingIndicator({ label }: { label: string | null }) {
+  const color = usePlaceholderColor();
+  return (
+    <View
+      className={cn('flex-row items-center gap-2', label ? 'py-1' : 'pt-2')}
+      accessibilityRole="progressbar"
+      accessibilityLabel={label ?? 'Still responding'}>
+      <ActivityIndicator size="small" color={color} />
+      {label && <Text variant="muted">{label}</Text>}
     </View>
   );
 }
@@ -182,13 +197,11 @@ export default function ChatScreen() {
               </View>
             ) : (
               <View className="max-w-[95%]">
-                {item.content ? (
-                  <Text className="leading-6">{item.content}</Text>
-                ) : (
-                  sending &&
-                  index === messages.length - 1 && <Text variant="muted">{status ?? 'Thinking…'}</Text>
-                )}
+                {item.content ? <Text className="leading-6">{item.content}</Text> : null}
                 {item.cards.length > 0 && <CardList cards={item.cards} />}
+                {sending && index === messages.length - 1 && (
+                  <StreamingIndicator label={item.content ? null : (status ?? 'Thinking…')} />
+                )}
               </View>
             )
           }
