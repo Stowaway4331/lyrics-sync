@@ -12,7 +12,7 @@ import { useRecognizer } from '@/hooks/use-recognizer';
 import { useSyncClock } from '@/hooks/use-sync-clock';
 import { NUDGE_STEP_MS } from '@/lib/config';
 import { parseLrc, plainLines } from '@/lib/lrc';
-import { nudge, reportWrongVersion, syncToLine, togglePause, usePlayerStore } from '@/lib/player-store';
+import { nudge, reportWrongVersion, syncToLine, usePlayerStore } from '@/lib/player-store';
 import { formatTime } from '@/lib/sync';
 import { cn } from '@/lib/utils';
 
@@ -105,6 +105,9 @@ export default function PlayerScreen() {
   // Plain view: the synced view with every sync feature off (auto-scroll, dimmed lines,
   // tap-to-sync, ± nudge). The clock keeps running only so switching back lands on the right line.
   const [showPlain, setShowPlain] = useState(false);
+  // Pausing stops only the auto-scroll: the clock and highlight keep following the song, so
+  // resuming scrolls straight to the line playing now.
+  const [scrollPaused, setScrollPaused] = useState(false);
   const { index, positionMs } = useSyncClock(synced ?? [], player?.sync ?? null, player?.nudgeMs ?? 0, calibrationMs);
 
   // Auto-scroll keeps the current line about a third of the way down the screen.
@@ -129,11 +132,11 @@ export default function PlayerScreen() {
     AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion).catch(() => {});
   }, []);
   useEffect(() => {
-    if (showPlain || index < 0 || Date.now() < manualUntil.current) return;
+    if (showPlain || scrollPaused || index < 0 || Date.now() < manualUntil.current) return;
     const y = lineY.current[index];
     if (y == null) return;
     scrollRef.current?.scrollTo({ y: Math.max(0, y - viewportH * 0.33), animated: !reduceMotion });
-  }, [index, viewportH, reduceMotion, showPlain]);
+  }, [index, viewportH, reduceMotion, showPlain, scrollPaused]);
 
   if (!player) {
     return (
@@ -163,7 +166,6 @@ export default function PlayerScreen() {
   else if (!synced) status = 'Lyrics not synced';
   else if (!sync) status = 'Listen or tap a line to sync';
   else if (ended) status = 'Song ended';
-  else if (sync.pausedAt != null) status = `Paused · ${formatTime(positionMs)}`;
   else status = `Synced · ${formatTime(positionMs)}`;
 
   return (
@@ -190,6 +192,11 @@ export default function PlayerScreen() {
                     ? 'Translation failed'
                     : translation.lang}
               </Text>
+            </Badge>
+          )}
+          {scrollPaused && sync && synced && !showPlain && (
+            <Badge variant="outline">
+              <Text>Auto-scroll paused</Text>
             </Badge>
           )}
           {versionMismatch && (
@@ -259,9 +266,12 @@ export default function PlayerScreen() {
               <Button
                 variant="ghost"
                 size="icon"
-                onPress={togglePause}
-                accessibilityLabel={sync.pausedAt != null ? 'Resume sync' : 'Pause sync'}>
-                <Icon as={sync.pausedAt != null ? Play : Pause} size={18} />
+                onPress={() => {
+                  manualUntil.current = 0; // resuming jumps to the current line right away
+                  setScrollPaused((p) => !p);
+                }}
+                accessibilityLabel={scrollPaused ? 'Resume auto-scroll' : 'Pause auto-scroll'}>
+                <Icon as={scrollPaused ? Play : Pause} size={18} />
               </Button>
               <Button
                 variant="ghost"

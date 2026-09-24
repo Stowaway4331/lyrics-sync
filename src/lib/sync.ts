@@ -1,11 +1,10 @@
 /** Monotonic milliseconds, unaffected by the device clock being changed. */
 export const now = () => performance.now();
 
-/** Sync anchor. While `pausedAt` is set the position is frozen at that moment. */
+/** Sync anchor: the song was at `offsetAtStopMs` at monotonic time `stoppedAt`. */
 export interface SyncState {
   offsetAtStopMs: number;
   stoppedAt: number;
-  pausedAt?: number | null;
 }
 
 /**

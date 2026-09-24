@@ -29,6 +29,7 @@ From testing the Android development build. **Exit:** every item below works on 
 - [x] 7.17 Lyrics without timing use the new plain view style
 - [x] 7.18 Pause and resume the sync timer and auto-scroll in synced view
 - [x] 7.19 Chat box follows the keyboard using react-native-keyboard-controller's keyboard handler instead of KeyboardAvoidingView
+- [x] 7.20 Pause stops only the auto-scroll; the timer keeps running so resume lands on the current line
 
 ## Notes
 
@@ -57,3 +58,4 @@ From testing the Android development build. **Exit:** every item below works on 
 - 2026-09-25, item 7.17: songs that only have untimed lyrics now render in the same style as plain view (large bold lines, full text colour, no taps); the old smaller plain-text style is removed. JS only; needs a check on the phone.
 - 2026-09-25, item 7.18: a pause / play button in the synced view's toolbar freezes the song position, so the highlight and auto-scroll stop; the badge reads "Paused · m:ss". Resume continues from the frozen position (the sync anchor moves forward by the paused time). Tapping a line while paused moves the frozen position to that line; a resync resumes. Hidden in plain view with the other sync controls. JS only; needs a check on the phone.
 - 2026-09-25, item 7.19: the chat no longer uses `KeyboardAvoidingView`. `react-native-keyboard-controller`'s `useKeyboardHandler` reports the keyboard height on every frame of its animation, and an animated spacer under the composer grows by that height minus the tab bar, pushing the input up with the keyboard (the approach in Expo's keyboard guide). The tab bar now stays in place (hiding it mid-animation made the height jump), and the list scrolls to the latest message when it shrinks. Android and web bundles build. JS only on top of the native module already in build `253d0d13`; needs a check on the phone.
+- 2026-09-25, item 7.20: changes 7.18. Pause now stops only the auto-scroll: the timer and the highlighted line keep following the song, and an "Auto-scroll paused" badge shows. Resume scrolls straight to the line playing now. The frozen-position logic from 7.18 is removed. JS only; needs a check on the phone.

@@ -125,26 +125,7 @@ async function followRecovery(jobId: string, song: Song) {
  */
 export function syncToLine(timeMs: number) {
   const calibrationMs = state.prefs.calibrationMs;
-  const at = now();
-  setPlayer((p) => ({
-    ...p,
-    // Stays paused if it was paused: the tapped line becomes the frozen position.
-    sync: { offsetAtStopMs: timeMs - calibrationMs, stoppedAt: at, pausedAt: p.sync?.pausedAt != null ? at : null },
-    nudgeMs: 0,
-  }));
-}
-
-/** Pauses or resumes the sync timer (and with it the highlight and auto-scroll). */
-export function togglePause() {
-  setPlayer((p) => {
-    if (!p.sync) return p;
-    const at = now();
-    const { pausedAt } = p.sync;
-    return pausedAt != null
-      ? // Resume: move the anchor forward by the paused time so the position continues from where it froze.
-        { ...p, sync: { ...p.sync, stoppedAt: p.sync.stoppedAt + (at - pausedAt), pausedAt: null } }
-      : { ...p, sync: { ...p.sync, pausedAt: at } };
-  });
+  setPlayer((p) => ({ ...p, sync: { offsetAtStopMs: timeMs - calibrationMs, stoppedAt: now() }, nudgeMs: 0 }));
 }
 
 export function nudge(deltaMs: number) {

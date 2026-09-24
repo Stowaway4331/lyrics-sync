@@ -21,12 +21,11 @@ export function useSyncClock(
     if (!sync || lines.length === 0) return;
     let frame = 0;
     const tick = () => {
-      // Paused: position frozen at the pause moment, and no further frames.
-      const position = songPosition(sync, sync.pausedAt ?? now(), nudgeMs, calibrationMs);
+      const position = songPosition(sync, now(), nudgeMs, calibrationMs);
       const index = lineIndexAt(lines, position);
       const second = Math.floor(position / 1000);
       setState((s) => (s.index === index && s.second === second ? s : { index, second }));
-      if (sync.pausedAt == null) frame = requestAnimationFrame(tick);
+      frame = requestAnimationFrame(tick);
     };
     tick();
     return () => cancelAnimationFrame(frame);
