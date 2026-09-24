@@ -24,7 +24,7 @@
   ],
 
   "vars": {
-    "ACR_HOST": "identify-eu-west-1.acrcloud.com"
+    "ACR_HOST": "identify-ap-southeast-1.acrcloud.com"
   }
   // Secrets (set with `npx wrangler secret put <NAME>`, or .dev.vars locally):
   //   ACR_ACCESS_KEY, ACR_ACCESS_SECRET

@@ -41,7 +41,7 @@ npx wrangler login
 npm run dev                      # http://localhost:8787
 ```
 
-If your ACRCloud project is not in `eu-west-1`, change `ACR_HOST` in `wrangler.jsonc`.
+`ACR_HOST` in `wrangler.jsonc` must match your ACRCloud project's region (shown as the project host in the ACRCloud console). This repo uses `identify-ap-southeast-1.acrcloud.com`; a key used on the wrong region fails with `3001 Missing/Invalid Access Key`.
 
 ### 2. App
 
