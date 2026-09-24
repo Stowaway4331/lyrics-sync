@@ -29,8 +29,8 @@ const LyricLine = memo(function LyricLine({
 }: {
   text: string;
   translation?: string;
-  /** `static`: the synced look, all in full text colour (plain view); `plain`: lyrics that have no timing. */
-  state: 'past' | 'current' | 'future' | 'static' | 'plain';
+  /** `static`: the synced look, all in full text colour (plain view, and lyrics that have no timing). */
+  state: 'past' | 'current' | 'future' | 'static';
   index: number;
   onLineLayout?: (index: number, y: number) => void;
   /** Tap to sync the lyrics to this line. */
@@ -50,7 +50,7 @@ const LyricLine = memo(function LyricLine({
       className={cn('-mx-2 rounded-md px-2 py-2', empty && 'py-1', onPress && 'active:bg-accent')}>
       <Text
         className={cn(
-          state === 'plain' ? 'text-lg leading-7' : 'text-2xl font-semibold leading-8',
+          'text-2xl font-semibold leading-8',
           (state === 'current' || state === 'static') && 'text-foreground',
           state === 'past' && 'text-muted-foreground/60',
           state === 'future' && 'text-muted-foreground'
@@ -229,7 +229,7 @@ export default function PlayerScreen() {
           />
         ))}
         {plain?.map((text, i) => (
-          <LyricLine key={i} index={i} text={text} translation={translations?.[i]} state="plain" />
+          <LyricLine key={i} index={i} text={text} translation={translations?.[i]} state="static" />
         ))}
         {!synced && !plain && (
           <View className="items-center gap-2 py-16">
