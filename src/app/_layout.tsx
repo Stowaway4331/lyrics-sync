@@ -6,6 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as SystemUI from 'expo-system-ui';
 import { useColorScheme } from 'nativewind';
 import { useEffect } from 'react';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 
 import { startLive } from '@/lib/live';
 import { loadPrefs } from '@/lib/player-store';
@@ -27,14 +28,16 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <ThemeProvider value={NAV_THEME[scheme]}>
-      <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
-      <Stack screenOptions={{ headerShadowVisible: false, headerBackButtonDisplayMode: 'minimal' }}>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="player" options={{ title: '' }} />
-        <Stack.Screen name="language" options={{ presentation: 'modal', title: 'Translate to' }} />
-      </Stack>
-      <PortalHost />
-    </ThemeProvider>
+    <KeyboardProvider>
+      <ThemeProvider value={NAV_THEME[scheme]}>
+        <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+        <Stack screenOptions={{ headerShadowVisible: false, headerBackButtonDisplayMode: 'minimal' }}>
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="player" options={{ title: '' }} />
+          <Stack.Screen name="language" options={{ presentation: 'modal', title: 'Translate to' }} />
+        </Stack>
+        <PortalHost />
+      </ThemeProvider>
+    </KeyboardProvider>
   );
 }

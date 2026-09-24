@@ -1,16 +1,16 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useHeaderHeight } from 'expo-router/react-navigation';
 import { ArrowUp, X } from 'lucide-react-native';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   FlatList,
-  KeyboardAvoidingView,
   Platform,
   Pressable,
   View,
   type NativeSyntheticEvent,
   type TextInputKeyPressEventData,
 } from 'react-native';
+
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 
 import { SongRow } from '@/components/song-row';
 import { Button } from '@/components/ui/button';
@@ -72,7 +72,6 @@ function CardList({ cards }: { cards: SongCard[] }) {
 
 export default function ChatScreen() {
   const { about } = useLocalSearchParams<{ about?: string }>();
-  const headerHeight = useHeaderHeight();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -145,89 +144,91 @@ export default function ChatScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      className="flex-1 bg-background"
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={headerHeight}>
-      <FlatList
-        ref={listRef}
-        data={messages}
-        keyExtractor={(m) => String(m.id)}
-        contentContainerClassName="gap-4 p-4 grow"
-        keyboardShouldPersistTaps="handled"
-        onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
-        ListEmptyComponent={
-          <View className="flex-1 justify-center gap-3">
-            <Text className="text-lg font-semibold">Find a song or ask about music</Text>
-            <Text variant="muted">
-              Type a title, a few lines you remember, or a music question. Answers can be wrong, so check the results.
-            </Text>
-            <View className="mt-2 gap-2">
-              {SUGGESTIONS.map((s) => (
-                <Pressable
-                  key={s}
-                  onPress={() => send(s)}
-                  accessibilityRole="button"
-                  className="rounded-lg border border-border px-4 py-3 active:bg-accent">
-                  <Text>{s}</Text>
-                </Pressable>
-              ))}
+    // Keyboard-controller's view measures the real keyboard overlap on both platforms; with
+    // Android edge-to-edge the window no longer resizes, so React Native's own view left the
+    // input under the keyboard.
+    <KeyboardAvoidingView behavior="padding" automaticOffset style={{ flex: 1 }}>
+      <View className="flex-1 bg-background">
+        <FlatList
+          ref={listRef}
+          data={messages}
+          keyExtractor={(m) => String(m.id)}
+          contentContainerClassName="gap-4 p-4 grow"
+          keyboardShouldPersistTaps="handled"
+          onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
+          ListEmptyComponent={
+            <View className="flex-1 justify-center gap-3">
+              <Text className="text-lg font-semibold">Find a song or ask about music</Text>
+              <Text variant="muted">
+                Type a title, a few lines you remember, or a music question. Answers can be wrong, so check the results.
+              </Text>
+              <View className="mt-2 gap-2">
+                {SUGGESTIONS.map((s) => (
+                  <Pressable
+                    key={s}
+                    onPress={() => send(s)}
+                    accessibilityRole="button"
+                    className="rounded-lg border border-border px-4 py-3 active:bg-accent">
+                    <Text>{s}</Text>
+                  </Pressable>
+                ))}
+              </View>
             </View>
-          </View>
-        }
-        renderItem={({ item, index }) =>
-          item.role === 'user' ? (
-            <View className="max-w-[85%] self-end rounded-2xl bg-primary px-4 py-2">
-              <Text className="text-primary-foreground">{item.content}</Text>
-            </View>
-          ) : (
-            <View className="max-w-[95%]">
-              {item.content ? (
-                <Text className="leading-6">{item.content}</Text>
-              ) : (
-                sending &&
-                index === messages.length - 1 && <Text variant="muted">{status ?? 'Thinking…'}</Text>
-              )}
-              {item.cards.length > 0 && <CardList cards={item.cards} />}
-            </View>
-          )
-        }
-      />
+          }
+          renderItem={({ item, index }) =>
+            item.role === 'user' ? (
+              <View className="max-w-[85%] self-end rounded-2xl bg-primary px-4 py-2">
+                <Text className="text-primary-foreground">{item.content}</Text>
+              </View>
+            ) : (
+              <View className="max-w-[95%]">
+                {item.content ? (
+                  <Text className="leading-6">{item.content}</Text>
+                ) : (
+                  sending &&
+                  index === messages.length - 1 && <Text variant="muted">{status ?? 'Thinking…'}</Text>
+                )}
+                {item.cards.length > 0 && <CardList cards={item.cards} />}
+              </View>
+            )
+          }
+        />
 
-      <View className="gap-2 border-t border-border px-4 py-3">
-        {aboutSong && (
-          <View className="flex-row items-center gap-2 self-start rounded-full bg-secondary py-1 pl-3 pr-1">
-            <Text className="text-sm" numberOfLines={1}>
-              About: {aboutSong.title}
-            </Text>
-            <Pressable
-              onPress={() => setAboutSong(null)}
-              accessibilityRole="button"
-              accessibilityLabel="Stop asking about this song"
-              hitSlop={10}
-              className="rounded-full p-1 active:bg-accent">
-              <Icon as={X} size={14} />
-            </Pressable>
+        <View className="gap-2 border-t border-border px-4 py-3">
+          {aboutSong && (
+            <View className="flex-row items-center gap-2 self-start rounded-full bg-secondary py-1 pl-3 pr-1">
+              <Text className="text-sm" numberOfLines={1}>
+                About: {aboutSong.title}
+              </Text>
+              <Pressable
+                onPress={() => setAboutSong(null)}
+                accessibilityRole="button"
+                accessibilityLabel="Stop asking about this song"
+                hitSlop={10}
+                className="rounded-full p-1 active:bg-accent">
+                <Icon as={X} size={14} />
+              </Pressable>
+            </View>
+          )}
+          <View className="flex-row items-end gap-2">
+            <Textarea
+              value={input}
+              onChangeText={setInput}
+              onKeyPress={onKeyPress}
+              placeholder={aboutSong ? 'Ask about this song, e.g. "translate to Spanish"' : 'Song title, lyrics, or a question'}
+              accessibilityLabel="Message"
+              className="max-h-32 min-h-11 flex-1"
+              numberOfLines={1}
+            />
+            <Button
+              size="icon"
+              className="h-11 w-11 rounded-full"
+              disabled={sending || !input.trim()}
+              onPress={() => send()}
+              accessibilityLabel="Send">
+              <Icon as={ArrowUp} size={18} className="text-primary-foreground" />
+            </Button>
           </View>
-        )}
-        <View className="flex-row items-end gap-2">
-          <Textarea
-            value={input}
-            onChangeText={setInput}
-            onKeyPress={onKeyPress}
-            placeholder={aboutSong ? 'Ask about this song, e.g. "translate to Spanish"' : 'Song title, lyrics, or a question'}
-            accessibilityLabel="Message"
-            className="max-h-32 min-h-11 flex-1"
-            numberOfLines={1}
-          />
-          <Button
-            size="icon"
-            className="h-11 w-11 rounded-full"
-            disabled={sending || !input.trim()}
-            onPress={() => send()}
-            accessibilityLabel="Send">
-            <Icon as={ArrowUp} size={18} className="text-primary-foreground" />
-          </Button>
         </View>
       </View>
     </KeyboardAvoidingView>
