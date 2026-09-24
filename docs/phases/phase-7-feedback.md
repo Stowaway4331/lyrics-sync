@@ -28,7 +28,7 @@ From testing the Android development build. **Exit:** every item below works on 
 - [x] 7.16 Plain view turns off every sync feature: tap-to-sync and the ± buttons too
 - [x] 7.17 Lyrics without timing use the new plain view style
 - [x] 7.18 Pause and resume the sync timer and auto-scroll in synced view
-- [ ] 7.19 Chat box follows the keyboard using react-native-keyboard-controller's keyboard handler instead of KeyboardAvoidingView
+- [x] 7.19 Chat box follows the keyboard using react-native-keyboard-controller's keyboard handler instead of KeyboardAvoidingView
 
 ## Notes
 
@@ -56,3 +56,4 @@ From testing the Android development build. **Exit:** every item below works on 
 - 2026-09-25, item 7.16: in plain view, lines no longer respond to taps and the ± buttons are hidden, so no sync feature is active (7.15 had kept them). The clock still runs underneath only so switching back to synced lands on the right line. JS only; needs a check on the phone.
 - 2026-09-25, item 7.17: songs that only have untimed lyrics now render in the same style as plain view (large bold lines, full text colour, no taps); the old smaller plain-text style is removed. JS only; needs a check on the phone.
 - 2026-09-25, item 7.18: a pause / play button in the synced view's toolbar freezes the song position, so the highlight and auto-scroll stop; the badge reads "Paused · m:ss". Resume continues from the frozen position (the sync anchor moves forward by the paused time). Tapping a line while paused moves the frozen position to that line; a resync resumes. Hidden in plain view with the other sync controls. JS only; needs a check on the phone.
+- 2026-09-25, item 7.19: the chat no longer uses `KeyboardAvoidingView`. `react-native-keyboard-controller`'s `useKeyboardHandler` reports the keyboard height on every frame of its animation, and an animated spacer under the composer grows by that height minus the tab bar, pushing the input up with the keyboard (the approach in Expo's keyboard guide). The tab bar now stays in place (hiding it mid-animation made the height jump), and the list scrolls to the latest message when it shrinks. Android and web bundles build. JS only on top of the native module already in build `253d0d13`; needs a check on the phone.

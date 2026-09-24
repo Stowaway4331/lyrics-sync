@@ -10,7 +10,10 @@ import {
   type NativeSyntheticEvent,
   type TextInputKeyPressEventData,
 } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+// Not re-exported publicly by expo-router; re-check this path after SDK upgrades.
+import { useBottomTabBarHeight } from 'expo-router/build/react-navigation/bottom-tabs';
+import { useKeyboardHandler } from 'react-native-keyboard-controller';
+import Animated, { useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
 
 import { SongRow } from '@/components/song-row';
 import { Button } from '@/components/ui/button';
@@ -85,6 +88,29 @@ function StreamingIndicator({ label }: { label: string | null }) {
   );
 }
 
+/**
+ * Height the composer must rise by: the keyboard height on every frame of its
+ * animation, minus the tab bar the keyboard slides over.
+ */
+function useKeyboardSpacer() {
+  const tabBarHeight = useBottomTabBarHeight();
+  const keyboardHeight = useSharedValue(0);
+  useKeyboardHandler(
+    {
+      onMove: (e) => {
+        'worklet';
+        keyboardHeight.value = Math.max(e.height, 0);
+      },
+      onEnd: (e) => {
+        'worklet';
+        keyboardHeight.value = Math.max(e.height, 0);
+      },
+    },
+    []
+  );
+  return useAnimatedStyle(() => ({ height: Math.max(keyboardHeight.value - tabBarHeight, 0) }), [tabBarHeight]);
+}
+
 export default function ChatScreen() {
   const { about } = useLocalSearchParams<{ about?: string }>();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -93,6 +119,7 @@ export default function ChatScreen() {
   const [status, setStatus] = useState<string | null>(null);
   const [aboutSong, setAboutSong] = useState<Song | null>(null);
   const listRef = useRef<FlatList<ChatMessage>>(null);
+  const keyboardSpacer = useKeyboardSpacer();
 
   useEffect(() => {
     getChatHistory()
@@ -159,11 +186,10 @@ export default function ChatScreen() {
   };
 
   return (
-    // Keyboard-controller's view measures the real keyboard overlap on both platforms; with
-    // Android edge-to-edge the window no longer resizes, so React Native's own view left the
-    // input under the keyboard.
-    <KeyboardAvoidingView behavior="padding" automaticOffset style={{ flex: 1 }}>
-      <View className="flex-1 bg-background">
+    // With Android edge-to-edge the window no longer resizes for the keyboard, so a spacer
+    // under the composer grows with the keyboard (frame by frame) and pushes it up.
+    <View className="flex-1 bg-background">
+      <View className="flex-1">
         <FlatList
           ref={listRef}
           data={messages}
@@ -171,6 +197,8 @@ export default function ChatScreen() {
           contentContainerClassName="gap-4 p-4 grow"
           keyboardShouldPersistTaps="handled"
           onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
+          // The list shrinks when the keyboard opens; keep the latest message in view.
+          onLayout={() => listRef.current?.scrollToEnd({ animated: false })}
           ListEmptyComponent={
             <View className="flex-1 justify-center gap-3">
               <Text className="text-lg font-semibold">Find a song or ask about music</Text>
@@ -244,6 +272,7 @@ export default function ChatScreen() {
           </View>
         </View>
       </View>
-    </KeyboardAvoidingView>
+      <Animated.View style={keyboardSpacer} />
+    </View>
   );
 }

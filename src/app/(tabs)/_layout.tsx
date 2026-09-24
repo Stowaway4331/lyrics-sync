@@ -12,8 +12,6 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         headerShadowVisible: false,
-        // More room for the chat while typing.
-        tabBarHideOnKeyboard: true,
         tabBarActiveTintColor: theme.foreground,
         tabBarInactiveTintColor: theme.mutedForeground,
         tabBarStyle: { borderTopColor: theme.border },
