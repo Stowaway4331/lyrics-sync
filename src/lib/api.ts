@@ -116,6 +116,15 @@ export const getHistory = () => request<{ songs: HistoryEntry[] }>('/history').t
 export const clearHistory = () => request<{ ok: true }>('/history', { method: 'DELETE' });
 export const getChatHistory = () => request<{ messages: ChatMessage[] }>('/chat/history').then((r) => r.messages);
 export const getPrefs = () => request<Prefs>('/prefs');
+
+/** Moves a chat thread to server storage (the caller removes its device copy after this succeeds). */
+export const archiveChat = (thread: {
+  id: string;
+  title: string;
+  createdAt: number;
+  updatedAt: number;
+  messages: ChatMessage[];
+}) => request<{ ok: true }>('/chat/archive', jsonInit('POST', { thread }));
 export const putPrefs = (prefs: Partial<Prefs>) => request<Prefs>('/prefs', jsonInit('PUT', prefs));
 
 export type ChatEvent =

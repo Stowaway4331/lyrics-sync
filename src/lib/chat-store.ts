@@ -106,6 +106,22 @@ export function openThread(id: string) {
 }
 
 /**
+ * Archives a thread: uploads it to server storage, then removes it from the
+ * device. Throws (and keeps the device copy) if the upload fails.
+ */
+export async function archiveThread(id: string) {
+  const thread = state.threads.find((t) => t.id === id);
+  if (!thread) return;
+  await api.archiveChat(thread);
+  set((s) => ({
+    ...s,
+    threads: s.threads.filter((t) => t.id !== id),
+    currentId: s.currentId === id ? null : s.currentId,
+  }));
+  persist();
+}
+
+/**
  * Saves a thread's messages. With no thread yet (a new chat), creates one and
  * makes it current. Returns the thread id.
  */

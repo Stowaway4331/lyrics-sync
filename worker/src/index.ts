@@ -11,6 +11,7 @@ import {
   SNIPPET_MATCH_THRESHOLD,
   titleMatches,
 } from './match';
+import type { ArchivedThread } from './session';
 import { discardPrefetched, ensureTranslation, prefetchTranslations } from './translations';
 import type { JobUpdate, Lyrics, Song, SongCard } from './types';
 
@@ -384,6 +385,34 @@ async function handle(req: Request, env: Env, ctx: ExecutionContext): Promise<Re
     await session.clearAll();
     return json({ ok: true });
   }
+  if (route === 'GET /chat/archive') return json({ threads: await session.listArchived() });
+  if (route === 'POST /chat/archive') {
+    const { thread } = await readJson<{ thread?: Partial<ArchivedThread> }>(req);
+    const messages = Array.isArray(thread?.messages) ? thread.messages : null;
+    if (
+      !thread ||
+      typeof thread.id !== 'string' ||
+      !/^[\w-]{1,64}$/.test(thread.id) ||
+      typeof thread.title !== 'string' ||
+      !messages ||
+      messages.length > 1000
+    )
+      throw new HttpError(400, 'Invalid thread');
+    const clean: ArchivedThread = {
+      id: thread.id,
+      title: thread.title.slice(0, 200),
+      createdAt: Number(thread.createdAt) || Date.now(),
+      updatedAt: Number(thread.updatedAt) || Date.now(),
+      messages: messages
+        .filter((m) => (m?.role === 'user' || m?.role === 'assistant') && typeof m.content === 'string')
+        .map((m) => ({ role: m.role, content: m.content.slice(0, 20_000), cards: Array.isArray(m.cards) ? m.cards.slice(0, 5) : [] })),
+    };
+    // Durable Object SQLite rows are limited to 2 MB.
+    if (JSON.stringify(clean.messages).length > 1_500_000) throw new HttpError(413, 'Chat is too large to archive');
+    await session.archiveThread(clean);
+    return json({ ok: true });
+  }
+
   // Chats used to be stored here; the app imports this once into its on-device threads.
   if (route === 'GET /chat/history') return json({ messages: await session.listMessages() });
   if (route === 'GET /prefs') return json(await session.getPrefs());

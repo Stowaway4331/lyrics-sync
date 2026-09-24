@@ -9,6 +9,14 @@ export interface StoredMessage {
   createdAt: number;
 }
 
+export interface ArchivedThread {
+  id: string;
+  title: string;
+  createdAt: number;
+  updatedAt: number;
+  messages: { role: 'user' | 'assistant'; content: string; cards?: SongCard[] }[];
+}
+
 export interface HistoryEntry extends Song {
   id: number;
   source: 'listen' | 'chat';
@@ -60,6 +68,10 @@ export class UserSession extends DurableObject<Env> {
         result_json TEXT, error TEXT, updated_at INTEGER NOT NULL
       );
       CREATE TABLE IF NOT EXISTS rate_events (kind TEXT NOT NULL, at INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS archived_threads (
+        id TEXT PRIMARY KEY, title TEXT NOT NULL, created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL, archived_at INTEGER NOT NULL, messages_json TEXT NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS language_usage (
         lang TEXT PRIMARY KEY, count INTEGER NOT NULL, last_used INTEGER NOT NULL
       );
@@ -151,6 +163,29 @@ export class UserSession extends DurableObject<Env> {
         cards: r.cards_json ? (JSON.parse(r.cards_json as string) as SongCard[]) : [],
         createdAt: r.created_at as number,
       }));
+  }
+
+  /** Stores a chat thread the app archived (it deletes its own copy once this succeeds). */
+  archiveThread(thread: ArchivedThread): void {
+    this.sql.exec(
+      'INSERT OR REPLACE INTO archived_threads (id, title, created_at, updated_at, archived_at, messages_json) VALUES (?, ?, ?, ?, ?, ?)',
+      thread.id,
+      thread.title,
+      thread.createdAt,
+      thread.updatedAt,
+      Date.now(),
+      JSON.stringify(thread.messages)
+    );
+  }
+
+  /** Archived chats, newest first (without their messages). */
+  listArchived(): { id: string; title: string; messageCount: number; archivedAt: number }[] {
+    return this.sql
+      .exec<{ id: string; title: string; archived_at: number; n: number }>(
+        'SELECT id, title, archived_at, json_array_length(messages_json) AS n FROM archived_threads ORDER BY archived_at DESC'
+      )
+      .toArray()
+      .map((r) => ({ id: r.id, title: r.title, messageCount: r.n, archivedAt: r.archived_at }));
   }
 
   clearAll(): void {
