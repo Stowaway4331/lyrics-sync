@@ -1,0 +1,417 @@
+import { identify, MAX_SAMPLE_BYTES, offsetAtStop, toSong as acrToSong } from './acrcloud';
+import { getAcrMapping, getLyricsById, getTranslation, hasMiss, putAcrMapping, putTrack } from './cache';
+import { CHAT_SYSTEM_PROMPT, routeChat, streamReply, type ChatRoute, type Message } from './llm';
+import { getTrack, LrclibUnavailable, searchTracks, toLyrics, type LrclibTrack } from './lrclib';
+import { basicCleanTitle, pickByDuration, primaryArtist, snippetScore, SNIPPET_MATCH_THRESHOLD } from './match';
+import type { Lyrics, PipelineParams, Song, SongCard } from './types';
+
+export { LyricsPipeline } from './pipeline';
+export { UserSession } from './session';
+
+const LIMITS = {
+  recognize: { limit: 30, windowMs: 3600_000 },
+  chat: { limit: 60, windowMs: 3600_000 },
+  jobs: { limit: 30, windowMs: 3600_000 },
+};
+
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, X-Device-Id, X-Clip-Ms',
+  'Access-Control-Max-Age': '86400',
+};
+
+class HttpError extends Error {
+  constructor(
+    public status: number,
+    message: string
+  ) {
+    super(message);
+  }
+}
+
+const json = (data: unknown, status = 200) =>
+  new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json', ...CORS } });
+
+function deviceIdOf(req: Request, url: URL): string {
+  const id = req.headers.get('X-Device-Id') ?? url.searchParams.get('deviceId') ?? '';
+  if (!/^[A-Za-z0-9-]{8,64}$/.test(id)) throw new HttpError(400, 'Missing or invalid device id');
+  return id;
+}
+
+const sessionOf = (env: Env, deviceId: string) => env.USER_SESSION.get(env.USER_SESSION.idFromName(deviceId));
+type Session = ReturnType<typeof sessionOf>;
+
+async function limit(session: Session, kind: keyof typeof LIMITS) {
+  const { limit: n, windowMs } = LIMITS[kind];
+  if (!(await session.checkRate(kind, n, windowMs))) throw new HttpError(429, 'Too many requests, try again later');
+}
+
+async function readJson<T>(req: Request): Promise<T> {
+  try {
+    return (await req.json()) as T;
+  } catch {
+    throw new HttpError(400, 'Invalid JSON body');
+  }
+}
+
+async function startJob(env: Env, session: Session, params: PipelineParams): Promise<string> {
+  await session.startJob(params.jobId, params.kind);
+  await env.PIPELINE.create({ id: params.jobId, params });
+  return params.jobId;
+}
+
+// ---------------------------------------------------------------------------
+// POST /recognize — body is the raw audio clip.
+// ---------------------------------------------------------------------------
+
+type LyricsStatus = 'found' | 'recovering' | 'none';
+
+async function recognize(req: Request, env: Env, ctx: ExecutionContext, deviceId: string) {
+  const session = sessionOf(env, deviceId);
+  await limit(session, 'recognize');
+
+  const clipMs = Math.min(20_000, Math.max(1000, Number(req.headers.get('X-Clip-Ms')) || 10_000));
+  const audio = await req.arrayBuffer();
+  if (audio.byteLength === 0) throw new HttpError(400, 'Empty audio');
+  if (audio.byteLength >= MAX_SAMPLE_BYTES) throw new HttpError(413, 'Audio clip too large (max 5 MB)');
+
+  const result = await identify(audio, req.headers.get('Content-Type') ?? 'application/octet-stream', {
+    host: env.ACR_HOST,
+    accessKey: env.ACR_ACCESS_KEY,
+    accessSecret: env.ACR_ACCESS_SECRET,
+  });
+  if (result.kind === 'no_match') return json({ match: false });
+  if (result.kind === 'error') {
+    console.error('ACRCloud error', result.code, result.message);
+    throw new HttpError(502, 'Song recognition is unavailable right now');
+  }
+
+  const song = acrToSong(result.music);
+  const offsetAtStopMs = offsetAtStop(result.music, clipMs);
+
+  let lyrics: Lyrics | null = null;
+  let status: LyricsStatus = 'none';
+  let jobId: string | null = null;
+
+  try {
+    const found = await findLyricsFast(env, song);
+    if (found) {
+      lyrics = found;
+      song.lrclibId = found.lrclibId;
+      status = 'found';
+    }
+  } catch (e) {
+    // LRCLIB is down or slow: let the Workflow retry in the background.
+    if (!(e instanceof LrclibUnavailable) && !(e instanceof DOMException)) throw e;
+  }
+
+  if (!lyrics && song.acrId && !(await hasMiss(env.CACHE, song.acrId))) {
+    jobId = await startJob(env, session, {
+      kind: 'recovery',
+      deviceId,
+      jobId: crypto.randomUUID(),
+      track: song,
+      excludeIds: [],
+    });
+    status = 'recovering';
+  }
+
+  ctx.waitUntil(session.addSong(song, 'listen'));
+  return json({ match: true, song, offsetAtStopMs, clipMs, lyrics, lyricsStatus: status, jobId, versionMismatch: false });
+}
+
+/** Cache → exact LRCLIB lookup → deterministic search. No LLM on this path. */
+async function findLyricsFast(env: Env, song: Song): Promise<Lyrics | null> {
+  if (song.acrId) {
+    const mapped = await getAcrMapping(env.CACHE, song.acrId);
+    if (mapped != null) {
+      const cached = await getLyricsById(env.CACHE, mapped);
+      if (cached) return cached.lyrics;
+    }
+  }
+
+  const durationS = song.durationMs / 1000;
+  const remember = async (track: LrclibTrack) => {
+    await putTrack(env.CACHE, track);
+    if (song.acrId) await putAcrMapping(env.CACHE, song.acrId, track.id);
+    return toLyrics(track);
+  };
+
+  const exact = await getTrack({
+    title: song.title,
+    artist: primaryArtist(song.artist),
+    album: song.album,
+    durationS,
+  });
+  if (exact && (exact.syncedLyrics || exact.plainLyrics || exact.instrumental)) return remember(exact);
+
+  const candidates = await searchTracks({ title: basicCleanTitle(song.title), artist: primaryArtist(song.artist) });
+  const pick = pickByDuration(candidates, durationS);
+  return pick?.withinTolerance ? remember(pick.track) : null;
+}
+
+// ---------------------------------------------------------------------------
+// POST /chat — Server-Sent Events: status, action, cards, token..., done.
+// ---------------------------------------------------------------------------
+
+interface ChatBody {
+  message?: string;
+  currentSong?: Song | null;
+}
+
+async function verifyCandidates(
+  env: Env,
+  ctx: ExecutionContext,
+  candidates: ChatRoute['candidates'],
+  snippet: string | null
+): Promise<SongCard[]> {
+  const results = await Promise.all(
+    candidates.map(async (c): Promise<SongCard | null> => {
+      try {
+        let tracks = await searchTracks({ title: c.title, artist: c.artist });
+        if (tracks.length === 0) tracks = await searchTracks({ q: `${c.title} ${c.artist}` });
+        const withLyrics = tracks.filter((t) => t.syncedLyrics || t.plainLyrics);
+        const track = withLyrics.find((t) => t.syncedLyrics) ?? withLyrics[0];
+        if (!track) return null;
+        ctx.waitUntil(putTrack(env.CACHE, track));
+
+        let label: SongCard['label'] = null;
+        if (snippet) {
+          const text = track.plainLyrics ?? track.syncedLyrics ?? '';
+          label = snippetScore(snippet, text) >= SNIPPET_MATCH_THRESHOLD ? 'match' : 'possible';
+        }
+        return {
+          lrclibId: track.id,
+          acrId: null,
+          title: track.trackName,
+          artist: track.artistName,
+          album: track.albumName,
+          durationMs: Math.round(track.duration * 1000),
+          label,
+        };
+      } catch {
+        return null;
+      }
+    })
+  );
+
+  const seen = new Set<number>();
+  const cards = results.filter((c): c is SongCard => !!c && !seen.has(c.lrclibId!) && !!seen.add(c.lrclibId!));
+  // Songs whose real lyrics contain the snippet go first.
+  return cards.sort((a, b) => Number(b.label === 'match') - Number(a.label === 'match'));
+}
+
+async function chat(req: Request, env: Env, ctx: ExecutionContext, deviceId: string) {
+  const session = sessionOf(env, deviceId);
+  const body = await readJson<ChatBody>(req);
+  const message = (body.message ?? '').trim();
+  if (!message || message.length > 1000) throw new HttpError(400, 'Message must be 1–1000 characters');
+  await limit(session, 'chat');
+  const currentSong = body.currentSong ?? null;
+
+  const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
+  const writer = writable.getWriter();
+  const encoder = new TextEncoder();
+  const send = (event: Record<string, unknown>) => writer.write(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+
+  const work = (async () => {
+    let reply = '';
+    let cards: SongCard[] = [];
+    try {
+      const history: Message[] = (await session.listMessages(20)).map((m) => ({ role: m.role, content: m.content }));
+      await session.addMessage('user', message);
+
+      await send({ type: 'status', text: 'Thinking…' });
+      const route = await routeChat(env.AI, message, history, currentSong).catch((e): ChatRoute => {
+        console.error('chat routing failed', e);
+        return { intent: 'other', candidates: [], action: null, language: null, snippet: null };
+      });
+      console.log('chat route', JSON.stringify(route));
+
+      const notes: string[] = [];
+      if ((route.intent === 'title' || route.intent === 'lyrics') && route.candidates.length > 0) {
+        await send({ type: 'status', text: 'Checking the lyrics database…' });
+        cards = await verifyCandidates(env, ctx, route.candidates, route.intent === 'lyrics' ? (route.snippet ?? message) : null);
+        notes.push(
+          cards.length
+            ? `These songs were verified in the lyrics database and are shown to the user as cards they can tap: ${cards
+                .map((c) => `"${c.title}" by ${c.artist}${c.label === 'match' ? ' (the quoted lyrics appear in this song)' : c.label === 'possible' ? ' (song exists, but the quoted lyrics were not found in it)' : ''}`)
+                .join('; ')}. Only mention these songs as results.`
+            : 'None of the songs you would suggest could be found in the lyrics database. Tell the user you could not find it and suggest adding more lines, or using the Listen tab while the song plays.'
+        );
+      } else if (route.intent === 'song_action') {
+        if (!currentSong?.lrclibId) {
+          notes.push('No song with lyrics is open. Ask the user to open a song first, then ask again.');
+        } else if (route.action === 'translate') {
+          const lang = route.language ?? (await session.getPrefs()).targetLanguage;
+          if (!lang) {
+            notes.push('The user wants a translation but did not say which language. Ask which language.');
+          } else {
+            await session.setPrefs({ targetLanguage: lang });
+            const cached = await getTranslation(env.CACHE, currentSong.lrclibId, lang);
+            if (cached) {
+              await send({ type: 'action', action: 'translate', lang, lines: cached });
+            } else {
+              await limit(session, 'jobs');
+              const jobId = await startJob(env, session, {
+                kind: 'translation',
+                deviceId,
+                jobId: crypto.randomUUID(),
+                lrclibId: currentSong.lrclibId,
+                lang,
+              });
+              await send({ type: 'action', action: 'translate', lang, jobId });
+            }
+            notes.push(`A ${lang} translation of the current song is being shown under the lyrics. Confirm briefly.`);
+          }
+        } else if (route.action === 'wrong_version') {
+          await limit(session, 'jobs');
+          const jobId = await startJob(env, session, {
+            kind: 'recovery',
+            deviceId,
+            jobId: crypto.randomUUID(),
+            track: currentSong,
+            excludeIds: [currentSong.lrclibId],
+          });
+          await send({ type: 'action', action: 'wrong_version', jobId });
+          notes.push('The app is now searching for a different version of the lyrics. Confirm briefly.');
+        }
+      }
+
+      const system = [
+        CHAT_SYSTEM_PROMPT,
+        currentSong ? `Current song on screen: "${currentSong.title}" by ${currentSong.artist}.` : '',
+        notes.length ? `App context for this reply: ${notes.join(' ')}` : '',
+      ]
+        .filter(Boolean)
+        .join('\n\n');
+
+      if (cards.length) await send({ type: 'cards', cards });
+      for await (const token of streamReply(env.AI, [
+        { role: 'system', content: system },
+        ...history,
+        { role: 'user', content: message },
+      ])) {
+        reply += token;
+        await send({ type: 'token', text: token });
+      }
+    } catch (e) {
+      console.error('chat failed', e);
+      const text = e instanceof HttpError ? e.message : 'Something went wrong. Please try again.';
+      if (!reply) reply = text;
+      await send({ type: 'error', message: text });
+    } finally {
+      if (reply) await session.addMessage('assistant', reply, cards);
+      await send({ type: 'done' });
+      await writer.close();
+    }
+  })();
+  ctx.waitUntil(work);
+
+  return new Response(readable, {
+    headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', ...CORS },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Router
+// ---------------------------------------------------------------------------
+
+async function handle(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  const url = new URL(req.url);
+  const path = url.pathname.replace(/\/+$/, '') || '/';
+  const route = `${req.method} ${path}`;
+
+  if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
+  if (route === 'GET /') return json({ ok: true, service: 'lyrics-sync-api' });
+
+  const deviceId = deviceIdOf(req, url);
+  const session = sessionOf(env, deviceId);
+
+  if (route === 'POST /recognize') return recognize(req, env, ctx, deviceId);
+  if (route === 'POST /chat') return chat(req, env, ctx, deviceId);
+
+  if (route === 'GET /ws') {
+    // The Durable Object accepts the socket and pushes job updates on it.
+    return session.fetch(req);
+  }
+
+  const lyricsMatch = /^\/lyrics\/(\d+)$/.exec(path);
+  if (req.method === 'GET' && lyricsMatch) {
+    const entry = await getLyricsById(env.CACHE, Number(lyricsMatch[1]));
+    if (!entry) throw new HttpError(404, 'Lyrics not found');
+    if (url.searchParams.get('save') === 'chat') ctx.waitUntil(session.addSong(entry.song, 'chat'));
+    return json(entry);
+  }
+
+  if (route === 'POST /translate') {
+    const { lrclibId, lang } = await readJson<{ lrclibId?: number; lang?: string }>(req);
+    if (!Number.isInteger(lrclibId) || !lang?.trim()) throw new HttpError(400, 'lrclibId and lang are required');
+    await session.setPrefs({ targetLanguage: lang.trim() });
+    const cached = await getTranslation(env.CACHE, lrclibId!, lang);
+    if (cached) return json({ status: 'complete', lines: cached });
+    await limit(session, 'jobs');
+    const jobId = await startJob(env, session, {
+      kind: 'translation',
+      deviceId,
+      jobId: crypto.randomUUID(),
+      lrclibId: lrclibId!,
+      lang: lang.trim(),
+    });
+    return json({ status: 'running', jobId });
+  }
+
+  if (route === 'POST /recover') {
+    // "Wrong version" from the player: look for another version of the lyrics.
+    const { song, excludeIds } = await readJson<{ song?: Song; excludeIds?: number[] }>(req);
+    if (!song?.title || !song.durationMs) throw new HttpError(400, 'song is required');
+    await limit(session, 'jobs');
+    const jobId = await startJob(env, session, {
+      kind: 'recovery',
+      deviceId,
+      jobId: crypto.randomUUID(),
+      track: song,
+      excludeIds: (excludeIds ?? []).filter(Number.isInteger),
+    });
+    return json({ status: 'running', jobId });
+  }
+
+  const jobMatch = /^\/jobs\/([\w-]+)$/.exec(path);
+  if (req.method === 'GET' && jobMatch) {
+    const job = await session.getJob(jobMatch[1]);
+    if (!job) throw new HttpError(404, 'Job not found');
+    return json(job);
+  }
+
+  if (route === 'GET /history') return json({ songs: await session.listSongs() });
+  if (route === 'DELETE /history') {
+    await session.clearAll();
+    return json({ ok: true });
+  }
+  if (route === 'GET /chat/history') return json({ messages: await session.listMessages() });
+  if (route === 'GET /prefs') return json(await session.getPrefs());
+  if (route === 'PUT /prefs') {
+    const body = await readJson<{ targetLanguage?: string | null; calibrationMs?: number }>(req);
+    return json(
+      await session.setPrefs({
+        ...(body.targetLanguage !== undefined ? { targetLanguage: body.targetLanguage?.trim() || null } : {}),
+        ...(Number.isFinite(body.calibrationMs) ? { calibrationMs: body.calibrationMs } : {}),
+      })
+    );
+  }
+
+  throw new HttpError(404, 'Not found');
+}
+
+export default {
+  async fetch(req, env, ctx): Promise<Response> {
+    try {
+      return await handle(req, env, ctx);
+    } catch (e) {
+      if (e instanceof HttpError) return json({ error: e.message }, e.status);
+      console.error('Unhandled error', e);
+      return json({ error: 'Internal error' }, 500);
+    }
+  },
+} satisfies ExportedHandler<Env>;
