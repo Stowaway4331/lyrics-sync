@@ -4,7 +4,7 @@
 
 - [x] 0.1 Check current docs for every external API and record the decisions below
 - [x] 0.2 Set up NativeWind, React Native Reusables and app dependencies
-- [ ] 0.3 Scaffold the Worker (`worker/`) with AI, KV, Durable Object and Workflow bindings
+- [x] 0.3 Scaffold the Worker (`worker/`) with AI, KV, Durable Object and Workflow bindings
 
 ## Decision note (checked 2026-09-24)
 

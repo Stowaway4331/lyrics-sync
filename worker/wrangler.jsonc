@@ -1,0 +1,31 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "lyrics-sync-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+  "observability": { "enabled": true },
+
+  // Workers AI (Llama 3.3) for chat, lookup recovery and translation.
+  "ai": { "binding": "AI" },
+
+  // Shared cache for lyrics, translations and ACRCloud -> LRCLIB mappings.
+  // Create with `npx wrangler kv namespace create CACHE` and paste the id here.
+  "kv_namespaces": [{ "binding": "CACHE", "id": "REPLACE_WITH_KV_NAMESPACE_ID" }],
+
+  // One UserSession per device: history, chat, prefs, jobs, WebSocket push.
+  "durable_objects": {
+    "bindings": [{ "name": "USER_SESSION", "class_name": "UserSession" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["UserSession"] }],
+
+  // Slow LLM work (lookup recovery, translation) as durable, retried steps.
+  "workflows": [
+    { "name": "lyrics-pipeline", "binding": "PIPELINE", "class_name": "LyricsPipeline" }
+  ],
+
+  "vars": {
+    "ACR_HOST": "identify-eu-west-1.acrcloud.com"
+  }
+  // Secrets (set with `npx wrangler secret put <NAME>`, or .dev.vars locally):
+  //   ACR_ACCESS_KEY, ACR_ACCESS_SECRET
+}
