@@ -15,6 +15,14 @@ export function basicCleanTitle(title: string): string {
     .trim();
 }
 
+/** Loose title equality: ignores case, punctuation and version tags, and allows one to contain the other. */
+export function titleMatches(a: string, b: string): boolean {
+  const norm = (s: string) => tokens(basicCleanTitle(s)).join(' ');
+  const x = norm(a);
+  const y = norm(b);
+  return x.length > 0 && y.length > 0 && (x === y || x.includes(y) || y.includes(x));
+}
+
 export function primaryArtist(artist: string): string {
   return artist.split(/\s*(?:,|&|;|\bfeat\.?|\bft\.?|\bx\b)\s*/i)[0]?.trim() || artist;
 }

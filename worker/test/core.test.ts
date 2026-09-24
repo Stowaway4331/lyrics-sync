@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { lineIndexAt, parseLrc } from '../../src/lib/lrc';
 import { offsetAtStop, type AcrMusic } from '../src/acrcloud';
 import type { LrclibTrack } from '../src/lrclib';
-import { basicCleanTitle, pickByDuration, primaryArtist, snippetScore, SNIPPET_MATCH_THRESHOLD } from '../src/match';
+import {
+  basicCleanTitle,
+  pickByDuration,
+  primaryArtist,
+  snippetScore,
+  SNIPPET_MATCH_THRESHOLD,
+  titleMatches,
+} from '../src/match';
 
 describe('parseLrc', () => {
   it('parses timestamps in several formats and sorts by time', () => {
@@ -83,6 +90,13 @@ describe('title cleanup', () => {
     expect(basicCleanTitle('Yesterday - Remastered 2009')).toBe('Yesterday');
     expect(basicCleanTitle('Song [Live at Wembley]')).toBe('Song');
     expect(basicCleanTitle('Plain Title')).toBe('Plain Title');
+  });
+
+  it('matches titles loosely but rejects different songs', () => {
+    expect(titleMatches("Don't Stop Believin'", 'dont stop believin')).toBe(true);
+    expect(titleMatches('Shape of You [Shape of You, 2017]', 'Shape of You')).toBe(true);
+    expect(titleMatches('Paint It, Black', 'Paint It Black')).toBe(true);
+    expect(titleMatches('Into The Storm', 'Something Just Like This')).toBe(false);
   });
 
   it('takes the first artist', () => {

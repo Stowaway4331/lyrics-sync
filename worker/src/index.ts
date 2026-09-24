@@ -2,7 +2,14 @@ import { identify, MAX_SAMPLE_BYTES, offsetAtStop, toSong as acrToSong } from '.
 import { getAcrMapping, getLyricsById, getTranslation, hasMiss, putAcrMapping, putTrack } from './cache';
 import { CHAT_SYSTEM_PROMPT, routeChat, streamReply, type ChatRoute, type Message } from './llm';
 import { getTrack, LrclibUnavailable, searchTracks, toLyrics, type LrclibTrack } from './lrclib';
-import { basicCleanTitle, pickByDuration, primaryArtist, snippetScore, SNIPPET_MATCH_THRESHOLD } from './match';
+import {
+  basicCleanTitle,
+  pickByDuration,
+  primaryArtist,
+  snippetScore,
+  SNIPPET_MATCH_THRESHOLD,
+  titleMatches,
+} from './match';
 import type { Lyrics, PipelineParams, Song, SongCard } from './types';
 
 export { LyricsPipeline } from './pipeline';
@@ -169,10 +176,12 @@ async function verifyCandidates(
   const results = await Promise.all(
     candidates.map(async (c): Promise<SongCard | null> => {
       try {
-        let tracks = await searchTracks({ title: c.title, artist: c.artist });
-        if (tracks.length === 0) tracks = await searchTracks({ q: `${c.title} ${c.artist}` });
-        const withLyrics = tracks.filter((t) => t.syncedLyrics || t.plainLyrics);
-        const track = withLyrics.find((t) => t.syncedLyrics) ?? withLyrics[0];
+        // LRCLIB search is fuzzy and can return unrelated songs, so only accept title matches.
+        const usable = (tracks: LrclibTrack[]) =>
+          tracks.filter((t) => (t.syncedLyrics || t.plainLyrics) && titleMatches(t.trackName, c.title));
+        let matches = usable(await searchTracks({ title: c.title, artist: c.artist }));
+        if (matches.length === 0) matches = usable(await searchTracks({ q: `${c.title} ${c.artist}` }));
+        const track = matches.find((t) => t.syncedLyrics) ?? matches[0];
         if (!track) return null;
         ctx.waitUntil(putTrack(env.CACHE, track));
 
