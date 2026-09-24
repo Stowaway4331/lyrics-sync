@@ -1,6 +1,6 @@
 import { router, Stack } from 'expo-router';
 import { Languages, MessageCircle, Minus, Plus } from 'lucide-react-native';
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, Pressable, ScrollView, View, type LayoutChangeEvent } from 'react-native';
 
 import { ListenButton } from '@/components/listen-button';
@@ -12,7 +12,7 @@ import { useRecognizer } from '@/hooks/use-recognizer';
 import { useSyncClock } from '@/hooks/use-sync-clock';
 import { NUDGE_STEP_MS } from '@/lib/config';
 import { parseLrc, plainLines } from '@/lib/lrc';
-import { nudge, reportWrongVersion, usePlayerStore } from '@/lib/player-store';
+import { nudge, reportWrongVersion, syncToLine, usePlayerStore } from '@/lib/player-store';
 import { formatTime } from '@/lib/sync';
 import { cn } from '@/lib/utils';
 
@@ -23,17 +23,30 @@ const LyricLine = memo(function LyricLine({
   text,
   translation,
   state,
-  onLayout,
+  index,
+  onLineLayout,
+  onSelect,
 }: {
   text: string;
   translation?: string;
   state: 'past' | 'current' | 'future' | 'plain';
-  onLayout?: (e: LayoutChangeEvent) => void;
+  index: number;
+  onLineLayout?: (index: number, y: number) => void;
+  /** Tap to sync the lyrics to this line. */
+  onSelect?: (index: number) => void;
 }) {
+  const onLayout = onLineLayout ? (e: LayoutChangeEvent) => onLineLayout(index, e.nativeEvent.layout.y) : undefined;
+  const onPress = onSelect ? () => onSelect(index) : undefined;
   const empty = text.trim() === '';
   const showTranslation = !!translation && translation.trim() !== '' && translation.trim() !== text.trim();
   return (
-    <View onLayout={onLayout} className={cn('py-2', empty && 'py-1')}>
+    <Pressable
+      onLayout={onLayout}
+      onPress={onPress}
+      disabled={!onPress}
+      accessibilityRole={onPress ? 'button' : 'text'}
+      accessibilityHint={onPress ? 'Syncs the lyrics to this line' : undefined}
+      className={cn('-mx-2 rounded-md px-2 py-2', empty && 'py-1', onPress && 'active:bg-accent')}>
       <Text
         className={cn(
           state === 'plain' ? 'text-lg leading-7' : 'text-2xl font-semibold leading-8',
@@ -49,7 +62,7 @@ const LyricLine = memo(function LyricLine({
           {translation}
         </Text>
       )}
-    </View>
+    </Pressable>
   );
 });
 
@@ -96,9 +109,21 @@ export default function PlayerScreen() {
   // Auto-scroll keeps the current line about a third of the way down the screen.
   const scrollRef = useRef<ScrollView>(null);
   const lineY = useRef<number[]>([]);
+  const onLineLayout = useCallback((i: number, y: number) => {
+    lineY.current[i] = y;
+  }, []);
   const [viewportH, setViewportH] = useState(0);
   const manualUntil = useRef(0);
   const [reduceMotion, setReduceMotion] = useState(false);
+  const onSelectLine = useCallback(
+    (i: number) => {
+      const line = synced?.[i];
+      if (!line) return;
+      manualUntil.current = 0; // let auto-scroll follow from the tapped line
+      syncToLine(line.timeMs);
+    },
+    [synced]
+  );
   useEffect(() => {
     AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion).catch(() => {});
   }, []);
@@ -136,7 +161,7 @@ export default function PlayerScreen() {
   else if (lyrics.instrumental) status = 'Instrumental';
   else if (!synced) status = 'Lyrics not synced';
   else if (showPlain) status = 'Plain view';
-  else if (!sync) status = 'Listen to sync';
+  else if (!sync) status = 'Listen or tap a line to sync';
   else if (ended) status = 'Song ended';
   else status = `Synced · ${formatTime(positionMs)}`;
 
@@ -198,11 +223,13 @@ export default function PlayerScreen() {
             text={line.text}
             translation={translations?.[i]}
             state={showPlain ? 'plain' : !sync ? 'future' : i === index ? 'current' : i < index ? 'past' : 'future'}
-            onLayout={(e) => (lineY.current[i] = e.nativeEvent.layout.y)}
+            index={i}
+            onLineLayout={onLineLayout}
+            onSelect={showPlain ? undefined : onSelectLine}
           />
         ))}
         {plain?.map((text, i) => (
-          <LyricLine key={i} text={text} translation={translations?.[i]} state="plain" />
+          <LyricLine key={i} index={i} text={text} translation={translations?.[i]} state="plain" />
         ))}
         {!synced && !plain && (
           <View className="items-center gap-2 py-16">

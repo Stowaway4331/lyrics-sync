@@ -3,6 +3,7 @@ import { useSyncExternalStore } from 'react';
 import * as api from './api';
 import type { Lyrics, RecognizeResponse, Song } from './api';
 import { awaitJob } from './live';
+import { now } from './sync';
 
 export interface Translation {
   lang: string;
@@ -119,6 +120,15 @@ async function followRecovery(jobId: string, song: Song) {
   } else {
     setPlayer((p) => ({ ...p, lyricsStatus: p.lyrics ? 'found' : 'none' }));
   }
+}
+
+/**
+ * "This line is playing now": sets the song position to the line's timestamp
+ * from this moment, and clears the nudge so +/- fine-tunes from here.
+ */
+export function syncToLine(timeMs: number) {
+  const calibrationMs = state.prefs.calibrationMs;
+  setPlayer((p) => ({ ...p, sync: { offsetAtStopMs: timeMs - calibrationMs, stoppedAt: now() }, nudgeMs: 0 }));
 }
 
 export function nudge(deltaMs: number) {
