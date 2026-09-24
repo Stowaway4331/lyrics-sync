@@ -1,5 +1,5 @@
 import { router, Stack } from 'expo-router';
-import { Languages, MessageCircle, Minus, Plus } from 'lucide-react-native';
+import { Languages, MessageCircle, Minus, Pause, Play, Plus } from 'lucide-react-native';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, Pressable, ScrollView, View, type LayoutChangeEvent } from 'react-native';
 
@@ -12,7 +12,7 @@ import { useRecognizer } from '@/hooks/use-recognizer';
 import { useSyncClock } from '@/hooks/use-sync-clock';
 import { NUDGE_STEP_MS } from '@/lib/config';
 import { parseLrc, plainLines } from '@/lib/lrc';
-import { nudge, reportWrongVersion, syncToLine, usePlayerStore } from '@/lib/player-store';
+import { nudge, reportWrongVersion, syncToLine, togglePause, usePlayerStore } from '@/lib/player-store';
 import { formatTime } from '@/lib/sync';
 import { cn } from '@/lib/utils';
 
@@ -163,6 +163,7 @@ export default function PlayerScreen() {
   else if (!synced) status = 'Lyrics not synced';
   else if (!sync) status = 'Listen or tap a line to sync';
   else if (ended) status = 'Song ended';
+  else if (sync.pausedAt != null) status = `Paused · ${formatTime(positionMs)}`;
   else status = `Synced · ${formatTime(positionMs)}`;
 
   return (
@@ -255,6 +256,13 @@ export default function PlayerScreen() {
         <View className="flex-row items-center gap-1">
           {synced && sync && !showPlain && (
             <>
+              <Button
+                variant="ghost"
+                size="icon"
+                onPress={togglePause}
+                accessibilityLabel={sync.pausedAt != null ? 'Resume sync' : 'Pause sync'}>
+                <Icon as={sync.pausedAt != null ? Play : Pause} size={18} />
+              </Button>
               <Button
                 variant="ghost"
                 size="icon"

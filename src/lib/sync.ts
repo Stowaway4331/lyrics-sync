@@ -1,13 +1,20 @@
 /** Monotonic milliseconds, unaffected by the device clock being changed. */
 export const now = () => performance.now();
 
+/** Sync anchor. While `pausedAt` is set the position is frozen at that moment. */
+export interface SyncState {
+  offsetAtStopMs: number;
+  stoppedAt: number;
+  pausedAt?: number | null;
+}
+
 /**
  * Current song position. `offsetAtStopMs` is where the song was when
  * recording stopped (from ACRCloud); the clock runs from that moment, so
  * upload and processing time don't affect accuracy.
  */
 export function songPosition(
-  sync: { offsetAtStopMs: number; stoppedAt: number },
+  sync: SyncState,
   at: number,
   nudgeMs: number,
   calibrationMs: number

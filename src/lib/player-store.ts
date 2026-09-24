@@ -3,7 +3,7 @@ import { useSyncExternalStore } from 'react';
 import * as api from './api';
 import type { Lyrics, RecognizeResponse, Song } from './api';
 import { awaitJob } from './live';
-import { now } from './sync';
+import { now, type SyncState } from './sync';
 
 export interface Translation {
   lang: string;
@@ -19,7 +19,7 @@ export interface PlayerState {
   /** Closest LRCLIB version was used, but its duration differs from the recording. */
   versionMismatch: boolean;
   /** Present when the lyrics are synced to audio that was heard. */
-  sync: { offsetAtStopMs: number; stoppedAt: number } | null;
+  sync: SyncState | null;
   nudgeMs: number;
   translation: Translation | null;
 }
@@ -125,7 +125,26 @@ async function followRecovery(jobId: string, song: Song) {
  */
 export function syncToLine(timeMs: number) {
   const calibrationMs = state.prefs.calibrationMs;
-  setPlayer((p) => ({ ...p, sync: { offsetAtStopMs: timeMs - calibrationMs, stoppedAt: now() }, nudgeMs: 0 }));
+  const at = now();
+  setPlayer((p) => ({
+    ...p,
+    // Stays paused if it was paused: the tapped line becomes the frozen position.
+    sync: { offsetAtStopMs: timeMs - calibrationMs, stoppedAt: at, pausedAt: p.sync?.pausedAt != null ? at : null },
+    nudgeMs: 0,
+  }));
+}
+
+/** Pauses or resumes the sync timer (and with it the highlight and auto-scroll). */
+export function togglePause() {
+  setPlayer((p) => {
+    if (!p.sync) return p;
+    const at = now();
+    const { pausedAt } = p.sync;
+    return pausedAt != null
+      ? // Resume: move the anchor forward by the paused time so the position continues from where it froze.
+        { ...p, sync: { ...p.sync, stoppedAt: p.sync.stoppedAt + (at - pausedAt), pausedAt: null } }
+      : { ...p, sync: { ...p.sync, pausedAt: at } };
+  });
 }
 
 export function nudge(deltaMs: number) {
