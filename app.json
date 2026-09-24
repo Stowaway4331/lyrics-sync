@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "lyrics-sync",
+    "name": "Lyrics Sync",
     "slug": "lyrics-sync",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -28,11 +28,20 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#ffffff",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
-      ]
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Lyrics Sync listens to a short clip of the music playing around you to identify the song.",
+          "enableBackgroundPlayback": false,
+          "enableBackgroundRecording": false
+        }
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,
