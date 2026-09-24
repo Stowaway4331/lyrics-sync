@@ -10,7 +10,12 @@
 
   // Shared cache for lyrics, translations and ACRCloud -> LRCLIB mappings.
   // Create with `npx wrangler kv namespace create CACHE` and paste the id here.
-  "kv_namespaces": [{ "binding": "CACHE", "id": "REPLACE_WITH_KV_NAMESPACE_ID" }],
+  "kv_namespaces": [
+    {
+      "binding": "CACHE",
+      "id": "6547a7e82202471fae9dbe8a8f55a3fa"
+    }
+  ],
 
   // One UserSession per device: history, chat, prefs, jobs, WebSocket push.
   "durable_objects": {
