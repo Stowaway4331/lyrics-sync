@@ -1,56 +1,96 @@
-# Welcome to your Expo app 👋
+# Lyrics Sync
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Listen to a song for a few seconds and get its lyrics scrolling in time with the music, from the exact point that was heard. Lyrics can be translated line by line, and a music chat finds songs by title or by remembered lyrics.
 
-## Get started
+- **App:** Expo SDK 57 (iOS, Android, web), Expo Router, NativeWind + React Native Reusables.
+- **Backend:** one Cloudflare Worker in [`worker/`](worker/) with Workers AI, Workflows, a Durable Object per user, and KV.
+- **Services:** [ACRCloud](https://www.acrcloud.com/) identifies the clip; [LRCLIB](https://lrclib.net/) provides time-synced lyrics.
 
-1. Install dependencies
+Progress and per-phase checklists: [`docs/phases/`](docs/phases/README.md).
 
-   ```bash
-   npm install
-   ```
+## How the Cloudflare requirements are met
 
-2. Start the app
+| Requirement | Where |
+| --- | --- |
+| LLM | Llama 3.3 70B on Workers AI (`worker/src/llm.ts`): chat routing and replies (song title, lyric search, trivia), lookup recovery, line-by-line translation |
+| Workflow / coordination | `LyricsPipeline` Workflow (`worker/src/pipeline.ts`) runs recovery and translation as retried steps; the `UserSession` Durable Object pushes results to the app over a WebSocket |
+| User input via chat or voice | Voice: the mic clip on the Listen tab. Chat: the Chat tab |
+| Memory or state | `UserSession` Durable Object with SQLite (`worker/src/session.ts`): song history, chat memory, preferences, jobs. KV caches lyrics and translations for all users |
 
-   ```bash
-   npx expo start
-   ```
+## How syncing works
 
-In the output, you'll find options to open the app in a
+ACRCloud reports where in the original track the clip matched. The Worker returns the song position at the moment recording stopped:
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```
+offsetAtStop = db_end_time_offset_ms + (clipMs − sample_end_time_offset_ms)
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+The app records that moment with a monotonic clock and adds the time elapsed since, so upload and processing time don't affect accuracy. **Resync** records a new clip; **±0.5 s** nudges the timing by hand.
 
-### Other setup steps
+## Run it locally
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+Requirements: Node 20+, a Cloudflare account (Workers AI runs remotely even in local dev), and an ACRCloud project (host, access key, access secret).
 
-## Learn more
+### 1. Worker
 
-To learn more about developing your project with Expo, look at the following resources:
+```bash
+cd worker
+npm install
+cp .dev.vars.example .dev.vars   # fill in ACR_ACCESS_KEY and ACR_ACCESS_SECRET
+npx wrangler login
+npm run dev                      # http://localhost:8787
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+If your ACRCloud project is not in `eu-west-1`, change `ACR_HOST` in `wrangler.jsonc`.
 
-## Join the community
+### 2. App
 
-Join our community of developers creating universal apps.
+```bash
+npm install
+echo "EXPO_PUBLIC_API_URL=http://localhost:8787" > .env.local
+npx expo start
+```
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+On a physical phone, use your computer's LAN IP in `EXPO_PUBLIC_API_URL` (for example `http://192.168.1.20:8787`) and start the Worker with `npm run dev -- --ip 0.0.0.0`. Optional: `EXPO_PUBLIC_CLIP_MS` sets the clip length (default 10000, allowed 5000–15000).
+
+The app uses native modules (`expo-audio`, `expo-secure-store`), so use a development build (`npx expo run:ios` / `npx expo run:android`, or `eas build --profile development`) if Expo Go doesn't include them. On web, the mic only works over HTTPS or on `localhost`.
+
+## Deploy the Worker
+
+```bash
+cd worker
+npx wrangler kv namespace create CACHE      # paste the id into wrangler.jsonc
+npx wrangler secret put ACR_ACCESS_KEY
+npx wrangler secret put ACR_ACCESS_SECRET
+npm run deploy
+```
+
+Then point `EXPO_PUBLIC_API_URL` at the deployed `*.workers.dev` URL.
+
+## API
+
+All requests except `GET /` need an `X-Device-Id` header (the WebSocket takes `?deviceId=`).
+
+| Method + path | Purpose |
+| --- | --- |
+| `POST /recognize` | Raw audio body, `X-Clip-Ms` header → song, `offsetAtStopMs`, lyrics or a recovery `jobId` |
+| `GET /lyrics/:lrclibId` | Lyrics by LRCLIB id (`?save=chat` adds it to history) |
+| `POST /translate` | `{ lrclibId, lang }` → cached lines or a `jobId` |
+| `POST /recover` | `{ song, excludeIds }` → look for another version of the lyrics |
+| `POST /chat` | `{ message, currentSong? }` → Server-Sent Events: `status`, `action`, `cards`, `token`, `done` |
+| `GET /jobs/:id` | Job status (polling fallback for the WebSocket) |
+| `GET /history`, `DELETE /history` | Song history (delete also clears chat) |
+| `GET /chat/history` | Chat memory |
+| `GET /prefs`, `PUT /prefs` | `targetLanguage`, `calibrationMs` |
+| `GET /ws` | WebSocket; pushes `job.update` events |
+
+Per-device limits: 30 recognitions, 60 chat messages and 30 background jobs per hour.
+
+## Checks
+
+```bash
+npx expo lint && npx tsc --noEmit        # app
+cd worker && npm run typecheck && npm test
+```
+
+Lyrics are shown for personal use. A public release needs a licensed lyrics provider.
