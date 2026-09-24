@@ -41,7 +41,8 @@ export class LyricsPipeline extends WorkflowEntrypoint<Env, PipelineParams> {
       const session = this.env.USER_SESSION.get(this.env.USER_SESSION.idFromName(p.deviceId));
       await session.finishJob(update);
     });
-    return update.status;
+    // The instance output lets other requests read the result without waiting on KV propagation.
+    return update;
   }
 
   private async recover(p: RecoveryParams, step: WorkflowStep): Promise<RecoveryResult | null> {

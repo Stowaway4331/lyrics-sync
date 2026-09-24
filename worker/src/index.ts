@@ -10,7 +10,7 @@ import {
   SNIPPET_MATCH_THRESHOLD,
   titleMatches,
 } from './match';
-import type { Lyrics, PipelineParams, Song, SongCard } from './types';
+import type { JobUpdate, Lyrics, PipelineParams, Song, SongCard } from './types';
 
 export { LyricsPipeline } from './pipeline';
 export { UserSession } from './session';
@@ -66,6 +66,58 @@ async function startJob(env: Env, session: Session, params: PipelineParams): Pro
   await session.startJob(params.jobId, params.kind);
   await env.PIPELINE.create({ id: params.jobId, params });
   return params.jobId;
+}
+
+/** Status of a Workflow instance, or null if it doesn't exist (or has aged out). */
+async function instanceStatus(env: Env, id: string): Promise<InstanceStatus | null> {
+  try {
+    return await (await env.PIPELINE.get(id)).status();
+  } catch {
+    return null;
+  }
+}
+
+const ACTIVE: InstanceStatus['status'][] = ['queued', 'running', 'waiting', 'paused', 'waitingForPause'];
+
+type TranslationState = { status: 'complete'; lines: string[] } | { status: 'running'; jobId: string };
+
+/**
+ * Returns a cached translation or the job producing it. Each (song, language)
+ * has one fixed Workflow instance id: KV caches misses for ~60 s, so a repeat
+ * request right after a translation finished would otherwise start a second,
+ * identical LLM job. Workflow instances are strongly consistent.
+ */
+async function ensureTranslation(
+  env: Env,
+  session: Session,
+  deviceId: string,
+  lrclibId: number,
+  lang: string
+): Promise<TranslationState> {
+  const cached = await getTranslation(env.CACHE, lrclibId, lang);
+  if (cached) return { status: 'complete', lines: cached };
+
+  const baseId = `tr-${lrclibId}-${lang.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`.slice(0, 90);
+  const existing = await instanceStatus(env, baseId);
+  const output = existing?.output as JobUpdate | undefined;
+  if (existing?.status === 'complete' && output?.result && 'lines' in output.result)
+    return { status: 'complete', lines: output.result.lines };
+  if (existing && ACTIVE.includes(existing.status)) {
+    await session.startJob(baseId, 'translation');
+    return { status: 'running', jobId: baseId };
+  }
+
+  await limit(session, 'jobs');
+  // A previous run for this id failed: start a fresh instance instead of reusing the id.
+  const jobId = existing ? `${baseId}-${Date.now()}` : baseId;
+  try {
+    await startJob(env, session, { kind: 'translation', deviceId, jobId, lrclibId, lang });
+  } catch (e) {
+    if (existing) throw e;
+    // Another request created the same instance a moment ago: wait on that one.
+    await session.startJob(baseId, 'translation');
+  }
+  return { status: 'running', jobId };
 }
 
 // ---------------------------------------------------------------------------
@@ -258,20 +310,12 @@ async function chat(req: Request, env: Env, ctx: ExecutionContext, deviceId: str
             notes.push('The user wants a translation but did not say which language. Ask which language.');
           } else {
             await session.setPrefs({ targetLanguage: lang });
-            const cached = await getTranslation(env.CACHE, currentSong.lrclibId, lang);
-            if (cached) {
-              await send({ type: 'action', action: 'translate', lang, lines: cached });
-            } else {
-              await limit(session, 'jobs');
-              const jobId = await startJob(env, session, {
-                kind: 'translation',
-                deviceId,
-                jobId: crypto.randomUUID(),
-                lrclibId: currentSong.lrclibId,
-                lang,
-              });
-              await send({ type: 'action', action: 'translate', lang, jobId });
-            }
+            const state = await ensureTranslation(env, session, deviceId, currentSong.lrclibId, lang);
+            await send(
+              state.status === 'complete'
+                ? { type: 'action', action: 'translate', lang, lines: state.lines }
+                : { type: 'action', action: 'translate', lang, jobId: state.jobId }
+            );
             notes.push(`A ${lang} translation of the current song is being shown under the lyrics. Confirm briefly.`);
           }
         } else if (route.action === 'wrong_version') {
@@ -358,17 +402,7 @@ async function handle(req: Request, env: Env, ctx: ExecutionContext): Promise<Re
     const { lrclibId, lang } = await readJson<{ lrclibId?: number; lang?: string }>(req);
     if (!Number.isInteger(lrclibId) || !lang?.trim()) throw new HttpError(400, 'lrclibId and lang are required');
     await session.setPrefs({ targetLanguage: lang.trim() });
-    const cached = await getTranslation(env.CACHE, lrclibId!, lang);
-    if (cached) return json({ status: 'complete', lines: cached });
-    await limit(session, 'jobs');
-    const jobId = await startJob(env, session, {
-      kind: 'translation',
-      deviceId,
-      jobId: crypto.randomUUID(),
-      lrclibId: lrclibId!,
-      lang: lang.trim(),
-    });
-    return json({ status: 'running', jobId });
+    return json(await ensureTranslation(env, session, deviceId, lrclibId!, lang.trim()));
   }
 
   if (route === 'POST /recover') {
@@ -388,8 +422,22 @@ async function handle(req: Request, env: Env, ctx: ExecutionContext): Promise<Re
 
   const jobMatch = /^\/jobs\/([\w-]+)$/.exec(path);
   if (req.method === 'GET' && jobMatch) {
-    const job = await session.getJob(jobMatch[1]);
+    const jobId = jobMatch[1];
+    const job = await session.getJob(jobId);
     if (!job) throw new HttpError(404, 'Job not found');
+    if (job.status !== 'running') return json(job);
+    // Only the device that started a Workflow gets its push; anyone else sharing the
+    // run (same song and language) picks up the result from the instance here.
+    const instance = await instanceStatus(env, jobId);
+    const output = instance?.output as JobUpdate | undefined;
+    if (instance?.status === 'complete' && output) {
+      await session.finishJob({ ...output, jobId });
+      return json(await session.getJob(jobId));
+    }
+    if (instance?.status === 'errored' || instance?.status === 'terminated') {
+      await session.finishJob({ type: 'job.update', jobId, kind: job.kind, status: 'failed', error: 'Job failed' });
+      return json(await session.getJob(jobId));
+    }
     return json(job);
   }
 
