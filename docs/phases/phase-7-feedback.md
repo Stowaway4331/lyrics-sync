@@ -19,7 +19,7 @@ From testing the Android development build. **Exit:** every item below works on 
 ## Translation speed
 
 - [x] 7.9 Translate faster: send the line batches to the model in parallel instead of one after another
-- [ ] 7.10 Language list sorted by global usage, from one constants file shared by the app and the Worker
+- [x] 7.10 Language list sorted by global usage, from one constants file shared by the app and the Worker
 - [ ] 7.11 Remember each user's language choices and list those first, most relevant first
 - [ ] 7.12 Silently pre-translate each song into the user's top 3 languages
 - [ ] 7.13 "Wrong version" discards the pre-translations made for that lyrics version

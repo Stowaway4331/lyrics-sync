@@ -6,21 +6,15 @@ import { FlatList, Pressable, View } from 'react-native';
 import { Icon } from '@/components/ui/icon';
 import { Input } from '@/components/ui/input';
 import { Text } from '@/components/ui/text';
+import { LANGUAGES } from '@/lib/languages';
 import { setTranslationLanguage, usePlayerStore } from '@/lib/player-store';
-
-const LANGUAGES = [
-  'English', 'Spanish', 'French', 'German', 'Italian', 'Portuguese', 'Dutch', 'Swedish', 'Polish',
-  'Russian', 'Ukrainian', 'Turkish', 'Arabic', 'Hebrew', 'Hindi', 'Bengali', 'Urdu', 'Tamil',
-  'Indonesian', 'Vietnamese', 'Thai', 'Tagalog', 'Japanese', 'Korean', 'Chinese (Simplified)',
-  'Chinese (Traditional)', 'Greek', 'Romanian', 'Czech', 'Hungarian',
-];
 
 export default function LanguageScreen() {
   const current = usePlayerStore((s) => s.prefs.targetLanguage);
   const [query, setQuery] = useState('');
   const options = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const list = LANGUAGES.filter((l) => l.toLowerCase().includes(q));
+    const list: string[] = LANGUAGES.filter((l) => l.toLowerCase().includes(q));
     return q ? list : ['Off', ...list];
   }, [query]);
 
