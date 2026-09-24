@@ -1,21 +1,28 @@
 # Lyrics Sync
 
+Stuck in a concert listening to songs you can't remember the name of? You really want to sing along to that song but can't remember its name or the lyrics. LyricSync solves that problem (I hope I'm not the only one).
+
+LyricSync provides synced lyrics from whatever point in time the song is recognized by it. So if you're suddenly asked to sing along to a karaoke and you need auto-scrolled lyrics, LyricSync is your best friend. 
+
 Listen to a song for a few seconds and get its lyrics scrolling in time with the music, from the exact point that was heard. Lyrics can be translated line by line, and a music chat finds songs by title or by remembered lyrics.
 
 - **App:** Expo SDK 57 (iOS, Android, web), Expo Router, NativeWind + React Native Reusables.
 - **Backend:** one Cloudflare Worker in [`worker/`](worker/) with Workers AI, Workflows, a Durable Object per user, and KV.
 - **Services:** [ACRCloud](https://www.acrcloud.com/) identifies the clip; [LRCLIB](https://lrclib.net/) provides time-synced lyrics.
 
-Progress and per-phase checklists: [`docs/phases/`](docs/phases/README.md).
+Note: The results from ACRCloud are not accurate and don't produce the best results for humming/noisy inputs. Gemini Song Search is a better (but expensive) alternative to ACRCloud. However, the current implementation works well for most studio/live recorded songs playing through speakers.
 
-## How the Cloudflare requirements are met
+## Cloudflare Stack
 
-| Requirement | Where |
+The whole backend is a single Cloudflare Worker ([`worker/`](worker/)).
+
+| Service | How the app uses it |
 | --- | --- |
-| LLM | Llama 3.3 70B on Workers AI (`worker/src/llm.ts`): chat routing and replies (song title, lyric search, trivia), lookup recovery, line-by-line translation |
-| Workflow / coordination | `LyricsPipeline` Workflow (`worker/src/pipeline.ts`) runs recovery and translation as retried steps; the `UserSession` Durable Object pushes results to the app over a WebSocket |
-| User input via chat or voice | Voice: the mic clip on the Listen tab. Chat: the Chat tab |
-| Memory or state | `UserSession` Durable Object with SQLite (`worker/src/session.ts`): song history, chat memory, preferences, jobs. KV caches lyrics and translations for all users |
+| **Workers** | The API (`worker/src/index.ts`). It signs and sends clips to ACRCloud, looks lyrics up on LRCLIB, streams chat replies, and starts background jobs. The quick path runs inside the request, so lyrics show up within a few seconds. |
+| **Workers AI** (Llama 3.3 70B) | Three jobs (`worker/src/llm.ts`). Chat: working out whether a message is a song title, remembered lyrics or a music question, then answering it. Lookup recovery: cleaning up messy titles like "Song (2011 Remaster) - Live" so the lyrics can still be found. Translation: line by line, so every translated line keeps its original timing. |
+| **Workflows** | `LyricsPipeline` (`worker/src/pipeline.ts`) runs the slow AI work in the background as retried steps. That's lyrics recovery and translation, including quietly pre-translating songs into each user's usual languages so a translation appears instantly when asked for. |
+| **Durable Objects** (SQLite) | One `UserSession` per device (`worker/src/session.ts`). It holds that user's song history, language preferences, rate limits, background jobs and archived chats. It also keeps a WebSocket open to the app, so finished jobs are pushed to it straight away. Live chat threads stay on the device. |
+| **KV** | A cache shared by all users: lyrics, translations, and which LRCLIB entry a recognised recording maps to. Each song only has to be looked up or translated once. |
 
 ## How syncing works
 
@@ -27,7 +34,7 @@ offsetAtStop = db_end_time_offset_ms + (clipMs − sample_end_time_offset_ms)
 
 The app records that moment with a monotonic clock and adds the time elapsed since, so upload and processing time don't affect accuracy. **Resync** records a new clip; **±0.5 s** nudges the timing by hand.
 
-## Run it locally
+## Local setup
 
 Requirements: Node 20+, a Cloudflare account (Workers AI runs remotely even in local dev), and an ACRCloud project (host, access key, access secret).
 
