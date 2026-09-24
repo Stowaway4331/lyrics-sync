@@ -18,7 +18,7 @@ From testing the Android development build. **Exit:** every item below works on 
 
 ## Translation speed
 
-- [ ] 7.9 Translate faster: send the line batches to the model in parallel instead of one after another
+- [x] 7.9 Translate faster: send the line batches to the model in parallel instead of one after another
 - [ ] 7.10 Language list sorted by global usage, from one constants file shared by the app and the Worker
 - [ ] 7.11 Remember each user's language choices and list those first, most relevant first
 - [ ] 7.12 Silently pre-translate each song into the user's top 3 languages
@@ -35,3 +35,4 @@ From testing the Android development build. **Exit:** every item below works on 
 ## Results
 
 - 2026-09-25, item 7.8: root view background now follows the theme (`#0a0a0a` dark / `#ffffff` light) via `expo-system-ui`; this part works in the current build. The dark splash background and the `expo-system-ui` config plugin apply from the next EAS build. Needs a check on the phone.
+- 2026-09-25, item 7.9: translation batches now run in parallel. Despacito (78 lines), fresh translations on production, measured by `worker/eval/translation-check.mts` (includes up to 3 s of polling delay): sequential 40-line batches 30.3 s (English, 4.3 baseline) → parallel 20-line 19.3 s (German) → parallel 10-line 14.0 s (Italian) and 10.8 s (Portuguese). Line counts matched every time. Kept 10-line batches.

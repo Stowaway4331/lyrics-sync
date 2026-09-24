@@ -91,42 +91,44 @@ export function cleanQuery(ai: Ai, track: Song): Promise<CleanQuery> {
 // Translation
 // ---------------------------------------------------------------------------
 
-const TRANSLATE_CHUNK = 40;
+/** Lines per model call. Batches run in parallel, so a song takes about as long as one batch (10 lines measured fastest). */
+const TRANSLATE_CHUNK = 10;
 
 /**
  * Translates lyric lines one-to-one. Timing never goes through the model: the
  * caller keeps timestamps and pairs them with the returned lines by index.
  */
 export async function translateLines(ai: Ai, lines: string[], lang: string): Promise<string[]> {
-  const out: string[] = [];
-  for (let start = 0; start < lines.length; start += TRANSLATE_CHUNK) {
-    const chunk = lines.slice(start, start + TRANSLATE_CHUNK);
-    const numbered = chunk.map((text, i) => ({ i, text }));
-    const translated = await runJson(
-      ai,
-      [
-        {
-          role: 'system',
-          content: `You translate song lyrics into ${lang}, line by line. Return exactly one translation per input line, in the same order, in "translations". Keep empty lines empty. If a line is already in ${lang}, return it unchanged. Keep the meaning natural; do not add notes.`,
-        },
-        { role: 'user', content: JSON.stringify(numbered) },
-      ],
+  const chunks: string[][] = [];
+  for (let start = 0; start < lines.length; start += TRANSLATE_CHUNK) chunks.push(lines.slice(start, start + TRANSLATE_CHUNK));
+  const translated = await Promise.all(chunks.map((chunk) => translateChunk(ai, chunk, lang)));
+  return translated.flat();
+}
+
+function translateChunk(ai: Ai, chunk: string[], lang: string): Promise<string[]> {
+  const numbered = chunk.map((text, i) => ({ i, text }));
+  return runJson(
+    ai,
+    [
       {
-        type: 'object',
-        properties: { translations: { type: 'array', items: { type: 'string' } } },
-        required: ['translations'],
+        role: 'system',
+        content: `You translate song lyrics into ${lang}, line by line. Return exactly one translation per input line, in the same order, in "translations". Keep empty lines empty. If a line is already in ${lang}, return it unchanged. Keep the meaning natural; do not add notes.`,
       },
-      (v) => {
-        if (!isObject(v) || !Array.isArray(v.translations)) throw new Error('expected { translations: [] }');
-        if (v.translations.length !== chunk.length)
-          throw new Error(`expected ${chunk.length} lines, got ${v.translations.length}`);
-        return v.translations.map((t, i) => (chunk[i].trim() === '' ? '' : String(t)));
-      },
-      { temperature: 0.2, maxTokens: 3000 }
-    );
-    out.push(...translated);
-  }
-  return out;
+      { role: 'user', content: JSON.stringify(numbered) },
+    ],
+    {
+      type: 'object',
+      properties: { translations: { type: 'array', items: { type: 'string' } } },
+      required: ['translations'],
+    },
+    (v) => {
+      if (!isObject(v) || !Array.isArray(v.translations)) throw new Error('expected { translations: [] }');
+      if (v.translations.length !== chunk.length)
+        throw new Error(`expected ${chunk.length} lines, got ${v.translations.length}`);
+      return v.translations.map((t, i) => (chunk[i].trim() === '' ? '' : String(t)));
+    },
+    { temperature: 0.2, maxTokens: 1500 }
+  );
 }
 
 // ---------------------------------------------------------------------------
