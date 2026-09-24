@@ -1,5 +1,6 @@
 import { identify, MAX_SAMPLE_BYTES, offsetAtStop, toSong as acrToSong } from './acrcloud';
-import { getAcrMapping, getLyricsById, getTranslation, hasMiss, putAcrMapping, putTrack } from './cache';
+import { getAcrMapping, getLyricsById, hasMiss, putAcrMapping, putTrack } from './cache';
+import { HttpError, instanceStatus, limit, sessionOf, startJob } from './jobs';
 import { CHAT_SYSTEM_PROMPT, routeChat, streamReply, type ChatRoute, type Message } from './llm';
 import { getTrack, LrclibUnavailable, searchTracks, toLyrics, type LrclibTrack } from './lrclib';
 import {
@@ -10,16 +11,11 @@ import {
   SNIPPET_MATCH_THRESHOLD,
   titleMatches,
 } from './match';
-import type { JobUpdate, Lyrics, PipelineParams, Song, SongCard } from './types';
+import { ensureTranslation, prefetchTranslations } from './translations';
+import type { JobUpdate, Lyrics, Song, SongCard } from './types';
 
 export { LyricsPipeline } from './pipeline';
 export { UserSession } from './session';
-
-const LIMITS = {
-  recognize: { limit: 30, windowMs: 3600_000 },
-  chat: { limit: 60, windowMs: 3600_000 },
-  jobs: { limit: 30, windowMs: 3600_000 },
-};
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -27,15 +23,6 @@ const CORS = {
   'Access-Control-Allow-Headers': 'Content-Type, X-Device-Id, X-Clip-Ms',
   'Access-Control-Max-Age': '86400',
 };
-
-class HttpError extends Error {
-  constructor(
-    public status: number,
-    message: string
-  ) {
-    super(message);
-  }
-}
 
 const json = (data: unknown, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json', ...CORS } });
@@ -46,78 +33,12 @@ function deviceIdOf(req: Request, url: URL): string {
   return id;
 }
 
-const sessionOf = (env: Env, deviceId: string) => env.USER_SESSION.get(env.USER_SESSION.idFromName(deviceId));
-type Session = ReturnType<typeof sessionOf>;
-
-async function limit(session: Session, kind: keyof typeof LIMITS) {
-  const { limit: n, windowMs } = LIMITS[kind];
-  if (!(await session.checkRate(kind, n, windowMs))) throw new HttpError(429, 'Too many requests, try again later');
-}
-
 async function readJson<T>(req: Request): Promise<T> {
   try {
     return (await req.json()) as T;
   } catch {
     throw new HttpError(400, 'Invalid JSON body');
   }
-}
-
-async function startJob(env: Env, session: Session, params: PipelineParams): Promise<string> {
-  await session.startJob(params.jobId, params.kind);
-  await env.PIPELINE.create({ id: params.jobId, params });
-  return params.jobId;
-}
-
-/** Status of a Workflow instance, or null if it doesn't exist (or has aged out). */
-async function instanceStatus(env: Env, id: string): Promise<InstanceStatus | null> {
-  try {
-    return await (await env.PIPELINE.get(id)).status();
-  } catch {
-    return null;
-  }
-}
-
-const ACTIVE: InstanceStatus['status'][] = ['queued', 'running', 'waiting', 'paused', 'waitingForPause'];
-
-type TranslationState = { status: 'complete'; lines: string[] } | { status: 'running'; jobId: string };
-
-/**
- * Returns a cached translation or the job producing it. Each (song, language)
- * has one fixed Workflow instance id: KV caches misses for ~60 s, so a repeat
- * request right after a translation finished would otherwise start a second,
- * identical LLM job. Workflow instances are strongly consistent.
- */
-async function ensureTranslation(
-  env: Env,
-  session: Session,
-  deviceId: string,
-  lrclibId: number,
-  lang: string
-): Promise<TranslationState> {
-  const cached = await getTranslation(env.CACHE, lrclibId, lang);
-  if (cached) return { status: 'complete', lines: cached };
-
-  const baseId = `tr-${lrclibId}-${lang.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`.slice(0, 90);
-  const existing = await instanceStatus(env, baseId);
-  const output = existing?.output as JobUpdate | undefined;
-  if (existing?.status === 'complete' && output?.result && 'lines' in output.result)
-    return { status: 'complete', lines: output.result.lines };
-  if (existing && ACTIVE.includes(existing.status)) {
-    await session.startJob(baseId, 'translation');
-    return { status: 'running', jobId: baseId };
-  }
-
-  await limit(session, 'jobs');
-  // A previous run for this id failed: start a fresh instance instead of reusing the id.
-  const jobId = existing ? `${baseId}-${Date.now()}` : baseId;
-  try {
-    await startJob(env, session, { kind: 'translation', deviceId, jobId, lrclibId, lang });
-  } catch (e) {
-    if (existing) throw e;
-    // Another request created the same instance a moment ago: wait on that one.
-    await session.startJob(baseId, 'translation');
-  }
-  return { status: 'running', jobId };
 }
 
 // ---------------------------------------------------------------------------
@@ -177,6 +98,7 @@ async function recognize(req: Request, env: Env, ctx: ExecutionContext, deviceId
   }
 
   ctx.waitUntil(session.addSong(song, 'listen'));
+  if (lyrics) ctx.waitUntil(prefetchTranslations(env, session, deviceId, lyrics, song.language));
   return json({ match: true, song, offsetAtStopMs, clipMs, lyrics, lyricsStatus: status, jobId, versionMismatch: false });
 }
 
@@ -396,6 +318,7 @@ async function handle(req: Request, env: Env, ctx: ExecutionContext): Promise<Re
     const entry = await getLyricsById(env.CACHE, Number(lyricsMatch[1]));
     if (!entry) throw new HttpError(404, 'Lyrics not found');
     if (url.searchParams.get('save') === 'chat') ctx.waitUntil(session.addSong(entry.song, 'chat'));
+    ctx.waitUntil(prefetchTranslations(env, session, deviceId, entry.lyrics, null));
     return json(entry);
   }
 

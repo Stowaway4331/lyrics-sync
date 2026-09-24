@@ -6,6 +6,8 @@ export interface Song {
   artist: string;
   album: string;
   durationMs: number;
+  /** Song language name (e.g. "English") when ACRCloud reported it. */
+  language?: string | null;
 }
 
 export interface Lyrics {
@@ -63,4 +65,6 @@ export type PipelineParams =
       jobId: string;
       lrclibId: number;
       lang: string;
+      /** Silent pre-translation (nobody asked yet). */
+      prefetch?: boolean;
     };

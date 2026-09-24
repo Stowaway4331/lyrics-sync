@@ -1,3 +1,4 @@
+import { languageFromCode } from '../../src/lib/languages';
 import type { Song } from './types';
 
 const TIMEOUT_MS = 8000;
@@ -7,6 +8,8 @@ export const MAX_SAMPLE_BYTES = 5 * 1024 * 1024;
 export interface AcrMusic {
   acrid: string;
   title: string;
+  /** ISO 639-1 code of the song's language, e.g. "en". */
+  language?: string;
   artists?: { name: string }[];
   album?: { name: string };
   duration_ms?: number;
@@ -104,5 +107,6 @@ export function toSong(music: AcrMusic): Song {
     artist: (music.artists ?? []).map((a) => a.name).join(', '),
     album: music.album?.name ?? '',
     durationMs: music.duration_ms ?? 0,
+    language: music.language ? languageFromCode(music.language) : null,
   };
 }

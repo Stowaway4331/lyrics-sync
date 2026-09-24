@@ -39,7 +39,15 @@ export const hasMiss = (kv: KVNamespace, acrId: string) => kv.get(keys.miss(acrI
 export const putMiss = (kv: KVNamespace, acrId: string) =>
   kv.put(keys.miss(acrId), '1', { expirationTtl: 7 * DAY_S });
 
+/** `prefetched`: made silently ahead of time and not yet requested by anyone. */
+export async function getTranslationEntry(kv: KVNamespace, id: number, lang: string) {
+  const { value, metadata } = await kv.getWithMetadata<string[], { prefetched?: boolean }>(
+    keys.translation(id, lang),
+    'json'
+  );
+  return value ? { lines: value, prefetched: metadata?.prefetched === true } : null;
+}
 export const getTranslation = (kv: KVNamespace, id: number, lang: string) =>
-  kv.get<string[]>(keys.translation(id, lang), 'json');
-export const putTranslation = (kv: KVNamespace, id: number, lang: string, lines: string[]) =>
-  kv.put(keys.translation(id, lang), JSON.stringify(lines));
+  getTranslationEntry(kv, id, lang).then((e) => e?.lines ?? null);
+export const putTranslation = (kv: KVNamespace, id: number, lang: string, lines: string[], prefetched = false) =>
+  kv.put(keys.translation(id, lang), JSON.stringify(lines), { metadata: { prefetched } });

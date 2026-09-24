@@ -1,9 +1,11 @@
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from 'cloudflare:workers';
 import { parseLrc, plainLines } from '../../src/lib/lrc';
 import { getLyricsById, getTranslation, putAcrMapping, putMiss, putTrack, putTranslation } from './cache';
+import { sessionOf } from './jobs';
 import { cleanQuery, translateLines } from './llm';
 import { searchTracks, toLyrics, toSong, type LrclibTrack } from './lrclib';
 import { basicCleanTitle, pickByDuration, primaryArtist } from './match';
+import { prefetchTranslations } from './translations';
 import type { JobUpdate, PipelineParams, RecoveryResult, TranslationResult } from './types';
 
 type RecoveryParams = Extract<PipelineParams, { kind: 'recovery' }>;
@@ -38,7 +40,7 @@ export class LyricsPipeline extends WorkflowEntrypoint<Env, PipelineParams> {
       };
     }
     await step.do('notify', async () => {
-      const session = this.env.USER_SESSION.get(this.env.USER_SESSION.idFromName(p.deviceId));
+      const session = sessionOf(this.env, p.deviceId);
       await session.finishJob(update);
     });
     // The instance output lets other requests read the result without waiting on KV propagation.
@@ -77,8 +79,13 @@ export class LyricsPipeline extends WorkflowEntrypoint<Env, PipelineParams> {
       if (track.acrId && picked.withinTolerance) await putAcrMapping(this.env.CACHE, track.acrId, picked.track.id);
     });
 
+    // Found lyrics the fast path missed: pre-translate them like any other song.
+    await step.do('prefetch-translations', () =>
+      prefetchTranslations(this.env, sessionOf(this.env, p.deviceId), p.deviceId, toLyrics(picked.track), track.language)
+    );
+
     return {
-      song: { ...toSong(picked.track, track.acrId) },
+      song: { ...toSong(picked.track, track.acrId), language: track.language ?? null },
       lyrics: toLyrics(picked.track),
       versionMismatch: !picked.withinTolerance,
     };
@@ -95,7 +102,7 @@ export class LyricsPipeline extends WorkflowEntrypoint<Env, PipelineParams> {
       const source = synced ? parseLrc(synced).map((l) => l.text) : plain ? plainLines(plain) : [];
       if (source.length === 0) return null;
       const translated = await translateLines(this.env.AI, source, p.lang);
-      await putTranslation(this.env.CACHE, p.lrclibId, p.lang, translated);
+      await putTranslation(this.env.CACHE, p.lrclibId, p.lang, translated, p.prefetch === true);
       return translated;
     });
     return lines ? { lrclibId: p.lrclibId, lang: p.lang, lines } : null;

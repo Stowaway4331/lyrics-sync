@@ -120,3 +120,30 @@ describe('snippetScore', () => {
     expect(snippetScore('we will rock you', lyrics)).toBeLessThan(SNIPPET_MATCH_THRESHOLD);
   });
 });
+
+describe('pre-translation targets', () => {
+  it('fills with the most used languages and skips the song language', async () => {
+    const { prefetchTargets } = await import('../src/translations');
+    expect(prefetchTargets([], null)).toEqual(['English', 'Chinese (Simplified)', 'Hindi']);
+    expect(prefetchTargets([], 'English')).toEqual(['Chinese (Simplified)', 'Hindi', 'Spanish']);
+    expect(prefetchTargets(['Korean', 'Spanish'], 'Spanish')).toEqual(['Korean', 'English', 'Chinese (Simplified)']);
+  });
+
+  it('maps ACRCloud language codes', async () => {
+    const { languageFromCode } = await import('../../src/lib/languages');
+    expect(languageFromCode('en')).toBe('English');
+    expect(languageFromCode('zh-Hant')).toBe('Chinese (Traditional)');
+    expect(languageFromCode('pt-BR')).toBe('Portuguese');
+    expect(languageFromCode('xx')).toBeNull();
+  });
+
+  it('detects English lyrics', async () => {
+    const { looksEnglish } = await import('../src/match');
+    const english =
+      "[00:06.22] Hello, it's me\n[00:11.84] I was wondering if after all these years you'd like to meet\n[00:17.96] To go over everything\n[00:23.47] They say that time's supposed to heal ya, but I ain't done much healing";
+    const spanish =
+      'Sí, sabes que ya llevo un rato mirándote\nTengo que bailar contigo hoy\nVi que tu mirada ya estaba llamándome\nMuéstrame el camino que yo voy';
+    expect(looksEnglish(english)).toBe(true);
+    expect(looksEnglish(spanish)).toBe(false);
+  });
+});

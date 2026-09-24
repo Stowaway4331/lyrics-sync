@@ -99,3 +99,15 @@ export function snippetScore(snippet: string, lyrics: string): number {
 }
 
 export const SNIPPET_MATCH_THRESHOLD = 0.7;
+
+const ENGLISH_WORDS = new Set(
+  'the and you i to a me my it in is of that your on for be love all we so but what do know can just like oh this with me no don dont not im are was baby when one they'.split(' ')
+);
+
+/** Rough check that lyrics are English: common English words make up a large share of the text. */
+export function looksEnglish(lyrics: string): boolean {
+  const words = tokens(lyrics.replace(/\[[^\]]*\]/g, ' '));
+  if (words.length < 20) return false;
+  const hits = words.filter((w) => ENGLISH_WORDS.has(w)).length;
+  return hits / words.length >= 0.25;
+}
