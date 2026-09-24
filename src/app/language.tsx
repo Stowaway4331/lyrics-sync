@@ -12,7 +12,8 @@ import { setTranslationLanguage, usePlayerStore } from '@/lib/player-store';
 type Row = { kind: 'header'; title: string } | { kind: 'lang'; lang: string };
 
 export default function LanguageScreen() {
-  const current = usePlayerStore((s) => s.prefs.targetLanguage);
+  // The language shown for this song (translations only appear after an explicit pick).
+  const current = usePlayerStore((s) => s.player?.translation?.lang ?? null);
   const mine = usePlayerStore((s) => s.prefs.languages);
   const [query, setQuery] = useState('');
 

@@ -89,7 +89,6 @@ export function applyRecognition(result: Extract<RecognizeResponse, { match: tru
     },
   }));
   if (result.jobId) void followRecovery(result.jobId, result.song);
-  else if (result.lyrics) void autoTranslate();
 }
 
 /** Opens a song from history or chat: lyrics without audio sync until the user listens. */
@@ -99,7 +98,6 @@ export async function openSong(lrclibId: number, source?: 'chat') {
     ...s,
     player: { song, lyrics, lyricsStatus: 'found', versionMismatch: false, sync: null, nudgeMs: 0, translation: null },
   }));
-  void autoTranslate();
 }
 
 async function followRecovery(jobId: string, song: Song) {
@@ -116,7 +114,6 @@ async function followRecovery(jobId: string, song: Song) {
       versionMismatch,
       translation: null,
     }));
-    void autoTranslate();
   } else {
     setPlayer((p) => ({ ...p, lyricsStatus: p.lyrics ? 'found' : 'none' }));
   }
@@ -175,11 +172,6 @@ export async function applyChatTranslation(lang: string, jobId?: string, lines?:
   pickLanguage(lang);
   if (lines) setPlayer((p) => ({ ...p, translation: { lang, status: 'complete', lines } }));
   else if (jobId) await followTranslation(lang, jobId);
-}
-
-async function autoTranslate() {
-  const lang = state.prefs.targetLanguage;
-  if (lang) await requestTranslation(lang);
 }
 
 async function requestTranslation(lang: string) {
