@@ -180,7 +180,7 @@ export default function PlayerScreen() {
     <View className="flex-1 bg-background">
       <Stack.Screen options={{ title: '' }} />
 
-      <View className="gap-1 px-5 pb-3">
+      <View className="gap-1 px-5 pb-2">
         <View className="flex-row items-start gap-3">
           <View className="flex-1 gap-1">
             <Text className="text-2xl font-bold tracking-tight" numberOfLines={2}>
@@ -200,7 +200,7 @@ export default function PlayerScreen() {
             </Button>
           )}
         </View>
-        <View className="mt-2 flex-row flex-wrap items-center gap-2" accessibilityLiveRegion="polite">
+        <View className="mt-1.5 flex-row flex-wrap items-center gap-1.5" accessibilityLiveRegion="polite">
           <Badge variant="secondary">
             <Text>{status}</Text>
           </Badge>
@@ -225,6 +225,7 @@ export default function PlayerScreen() {
               <Text>May be a different version</Text>
             </Badge>
           )}
+          {synced && <ViewToggle plain={showPlain} onChange={setShowPlain} />}
           {lyrics && lyricsStatus === 'found' && (
             <Pressable
               onPress={() => reportWrongVersion()}
@@ -238,12 +239,6 @@ export default function PlayerScreen() {
           )}
         </View>
       </View>
-
-      {synced && (
-        <View className="flex-row items-center px-5 pb-2">
-          <ViewToggle plain={showPlain} onChange={setShowPlain} />
-        </View>
-      )}
 
       <ScrollView
         ref={scrollRef}
