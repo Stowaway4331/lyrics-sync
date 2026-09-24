@@ -1,0 +1,30 @@
+{
+  "cli": {
+    "version": ">= 24.7.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://lyrics-sync-api.martindjeremie13.workers.dev"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://lyrics-sync-api.martindjeremie13.workers.dev"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://lyrics-sync-api.martindjeremie13.workers.dev"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}
