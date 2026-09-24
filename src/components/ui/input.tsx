@@ -1,7 +1,9 @@
+import { usePlaceholderColor } from '@/lib/theme';
 import { cn } from '@/lib/utils';
 import { Platform, TextInput } from 'react-native';
 
 function Input({ className, ...props }: React.ComponentProps<typeof TextInput> & React.RefAttributes<TextInput>) {
+  const placeholderTextColor = usePlaceholderColor();
   return (
     <TextInput
       className={cn(
@@ -21,6 +23,7 @@ function Input({ className, ...props }: React.ComponentProps<typeof TextInput> &
         }),
         className
       )}
+      placeholderTextColor={placeholderTextColor}
       {...props}
     />
   );

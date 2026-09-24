@@ -4,7 +4,7 @@ From testing the Android development build. **Exit:** every item below works on 
 
 ## Bugs
 
-- [ ] 7.1 Chat box placeholder text follows the theme (it stays black in dark mode)
+- [x] 7.1 Chat box placeholder text follows the theme (it stays black in dark mode)
 - [ ] 7.2 Chat box stays above the keyboard while typing (the keyboard currently covers it)
 - [x] 7.8 No white flash when switching screens in dark mode
 - [ ] 7.3 Big listen button submits the clip early at any length instead of stopping; a separate Cancel button discards it (tap-to-stop is unreliable today)
@@ -38,3 +38,4 @@ From testing the Android development build. **Exit:** every item below works on 
 - 2026-09-25, item 7.9: translation batches now run in parallel. Despacito (78 lines), fresh translations on production, measured by `worker/eval/translation-check.mts` (includes up to 3 s of polling delay): sequential 40-line batches 30.3 s (English, 4.3 baseline) → parallel 20-line 19.3 s (German) → parallel 10-line 14.0 s (Italian) and 10.8 s (Portuguese). Line counts matched every time. Kept 10-line batches.
 - 2026-09-25, item 7.11: explicit picks (language picker, "translate to X" in chat) are counted per user in the `UserSession` Durable Object; relevance = picks ÷ (1 + weeks-since-last-use ÷ 2). `GET /prefs` returns `languages` in that order, and the picker lists them under "Your languages" above "All languages". Production check: Korean once then Spanish twice → `["Spanish","Korean"]`.
 - 2026-09-25, item 7.12: recognising a song, opening one from history or chat, or recovery finding lyrics silently starts translations into the user's top 3 languages (their ranked picks, topped up from the global order), skipping the song's own language (ACRCloud's `language`, else an English word check). Pre-translations are tagged `prefetched` in KV until someone asks for one, and have their own limit (60 songs/hour/device). Production check: a new device opened "Alors On Danse" → jobs for English, Chinese (Simplified) and Hindi started; picking Hindi afterwards returned the finished lines immediately. Helpers moved to `worker/src/jobs.ts` and `worker/src/translations.ts`; 18/18 tests pass.
+- 2026-09-25, item 7.1: `Input` and `Textarea` now pass `placeholderTextColor` from the theme (`#737373` light / `#a3a3a3` dark) instead of relying on the class-based placeholder colour, which stayed black in dark mode on Android. Needs a check on the phone.

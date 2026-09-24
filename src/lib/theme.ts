@@ -1,4 +1,5 @@
 import { DarkTheme, DefaultTheme, type Theme } from 'expo-router';
+import { useColorScheme } from 'nativewind';
 
 export const THEME = {
   light: {
@@ -28,6 +29,18 @@ export const THEME = {
  * doesn't parse the space-separated hsl() form used above.
  */
 export const ROOT_BACKGROUND = { light: '#ffffff', dark: '#0a0a0a' } as const;
+
+/**
+ * Placeholder text (muted-foreground). Passed as `placeholderTextColor`
+ * because the class-based placeholder colour doesn't follow dark mode on native.
+ */
+export const PLACEHOLDER_COLOR = { light: '#737373', dark: '#a3a3a3' } as const;
+
+/** Placeholder colour for the current colour scheme. */
+export function usePlaceholderColor(): string {
+  const { colorScheme } = useColorScheme();
+  return PLACEHOLDER_COLOR[colorScheme === 'dark' ? 'dark' : 'light'];
+}
 
 export const NAV_THEME: Record<'light' | 'dark', Theme> = {
   light: {

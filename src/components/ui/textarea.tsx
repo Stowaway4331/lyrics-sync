@@ -1,3 +1,4 @@
+import { usePlaceholderColor } from '@/lib/theme';
 import { cn } from '@/lib/utils';
 import { Platform, TextInput } from 'react-native';
 
@@ -8,6 +9,7 @@ function Textarea({
   placeholderClassName,
   ...props
 }: React.ComponentProps<typeof TextInput> & React.RefAttributes<TextInput>) {
+  const placeholderTextColor = usePlaceholderColor();
   return (
     <TextInput
       className={cn(
@@ -22,6 +24,7 @@ function Textarea({
       multiline={multiline}
       numberOfLines={numberOfLines}
       textAlignVertical="top"
+      placeholderTextColor={placeholderTextColor}
       {...props}
     />
   );
