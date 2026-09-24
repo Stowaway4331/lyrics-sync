@@ -6,7 +6,7 @@ From testing the Android development build. **Exit:** every item below works on 
 
 - [ ] 7.1 Chat box placeholder text follows the theme (it stays black in dark mode)
 - [ ] 7.2 Chat box stays above the keyboard while typing (the keyboard currently covers it)
-- [ ] 7.8 No white flash when switching screens in dark mode
+- [x] 7.8 No white flash when switching screens in dark mode
 - [ ] 7.3 Big listen button submits the clip early at any length instead of stopping; a separate Cancel button discards it (tap-to-stop is unreliable today)
 
 ## Features
@@ -31,3 +31,7 @@ From testing the Android development build. **Exit:** every item below works on 
 - **7.8:** the native root view behind React defaults to white and was never set, so it shows through during screen transitions. Fix: set it to the theme background whenever the colour scheme changes.
 - **7.12 cost:** a Llama translation of a typical song is about 260 neurons (~$0.003). Pre-translating 3 languages for a song nobody has translated yet is about 780 neurons, so the 10,000 free daily neurons cover roughly 12 new songs a day; after that it is about $0.009 per new song. Songs already translated for a language cost nothing. Pre-translation has its own per-device limit so it never uses up the limit for translations the user asks for.
 - **7.12 English songs:** a target language matching the song's own language is skipped. The song language comes from ACRCloud when recognised; otherwise English is detected with a simple common-words check.
+
+## Results
+
+- 2026-09-25, item 7.8: root view background now follows the theme (`#0a0a0a` dark / `#ffffff` light) via `expo-system-ui`; this part works in the current build. The dark splash background and the `expo-system-ui` config plugin apply from the next EAS build. Needs a check on the phone.

@@ -36,7 +36,10 @@
         {
           "backgroundColor": "#ffffff",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "imageWidth": 76,
+          "dark": {
+            "backgroundColor": "#0a0a0a"
+          }
         }
       ],
       [
@@ -48,7 +51,8 @@
         }
       ],
       "expo-secure-store",
-      "expo-asset"
+      "expo-asset",
+      "expo-system-ui"
     ],
     "experiments": {
       "typedRoutes": true,
@@ -60,6 +64,7 @@
         "projectId": "5e64c550-a0e4-48a2-9f93-b8af730a995e"
       }
     },
-    "owner": "stowaway4331"
+    "owner": "stowaway4331",
+    "backgroundColor": "#ffffff"
   }
 }

@@ -23,6 +23,12 @@ export const THEME = {
   },
 };
 
+/**
+ * Background of the native root view behind React. Hex, because the native side
+ * doesn't parse the space-separated hsl() form used above.
+ */
+export const ROOT_BACKGROUND = { light: '#ffffff', dark: '#0a0a0a' } as const;
+
 export const NAV_THEME: Record<'light' | 'dark', Theme> = {
   light: {
     ...DefaultTheme,
