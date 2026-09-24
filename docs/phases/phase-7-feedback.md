@@ -34,6 +34,7 @@ From testing the Android development build. **Exit:** every item below works on 
 - [x] 7.22 Delete icon on a chat archives it: moved from the device to server storage
 - [x] 7.23 Fix lyric-search snippet trimming, which dropped the letter "s" at its edges
 - [x] 7.24 Pause sits above the lyrics next to the Synced/Plain toggle and also freezes the highlight
+- [x] 7.25 Larger pause / play button at the right end of the song title area
 
 ## Notes
 
@@ -67,3 +68,4 @@ From testing the Android development build. **Exit:** every item below works on 
 - 2026-09-25, item 7.22: each chat in the chat list has a delete icon; the first tap arms it ("Archive", in red, for 4 s), the second uploads the thread to `POST /chat/archive`, stored in the user's Durable Object (`archived_threads`, SQLite). The device copy is removed only after the server confirms, so a failed upload keeps the chat. `GET /chat/archive` lists archived chats (title, message count, archive time). Production check: a 2-message thread archived and listed; an invalid thread id rejected with 400. A regex escaping slip first rejected every valid id; found by this check and fixed before commit. Needs a check on the phone.
 - 2026-09-25, item 7.23: the regex that trims stray quotes from the chat's lyric snippet had lost its `\s` escape (written as `[s…]`), so it stripped the letter "s" from the start and end of snippets ("a thousand times" → "a thousand time", seen in the 5.1 log). Moved into `cleanSnippet()` with a regression test (19/19 pass). Lyric-search eval on production afterwards: top-1 18/20, unchanged (same two misses as the 5.3 baseline).
 - 2026-09-25, item 7.24: changes 7.20. A row just above the lyrics holds the Synced / Plain toggle on the left and the pause / play button on the right (moved out of the bottom toolbar). Pause now freezes the highlight on the line playing at that moment, so auto-scroll stops too, and a "Paused" badge shows; the timer keeps running underneath. Play highlights and scrolls to the line playing now. Tapping a line while paused re-syncs and moves the frozen highlight to it. JS only; needs a check on the phone.
+- 2026-09-25, item 7.25: the pause / play button moved from the row above the lyrics to the right end of the song title area, as a 48 px round button with a 24 px icon (was a 40 px ghost button with an 18–20 px icon). The row above the lyrics keeps only the Synced / Plain toggle. JS only; needs a check on the phone.

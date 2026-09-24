@@ -181,12 +181,25 @@ export default function PlayerScreen() {
       <Stack.Screen options={{ title: '' }} />
 
       <View className="gap-1 px-5 pb-3">
-        <Text className="text-2xl font-bold tracking-tight" numberOfLines={2}>
-          {song.title}
-        </Text>
-        <Text variant="muted" numberOfLines={1}>
-          {[song.artist, song.album].filter(Boolean).join(' · ')}
-        </Text>
+        <View className="flex-row items-start gap-3">
+          <View className="flex-1 gap-1">
+            <Text className="text-2xl font-bold tracking-tight" numberOfLines={2}>
+              {song.title}
+            </Text>
+            <Text variant="muted" numberOfLines={1}>
+              {[song.artist, song.album].filter(Boolean).join(' · ')}
+            </Text>
+          </View>
+          {synced && sync && !showPlain && (
+            <Button
+              variant="secondary"
+              onPress={togglePause}
+              className="h-12 w-12 rounded-full px-0"
+              accessibilityLabel={paused ? 'Resume sync highlighting' : 'Pause sync highlighting'}>
+              <Icon as={paused ? Play : Pause} size={24} />
+            </Button>
+          )}
+        </View>
         <View className="mt-2 flex-row flex-wrap items-center gap-2" accessibilityLiveRegion="polite">
           <Badge variant="secondary">
             <Text>{status}</Text>
@@ -227,17 +240,8 @@ export default function PlayerScreen() {
       </View>
 
       {synced && (
-        <View className="flex-row items-center justify-between px-5 pb-2">
+        <View className="flex-row items-center px-5 pb-2">
           <ViewToggle plain={showPlain} onChange={setShowPlain} />
-          {sync && !showPlain && (
-            <Button
-              variant="ghost"
-              size="icon"
-              onPress={togglePause}
-              accessibilityLabel={paused ? 'Resume sync highlighting' : 'Pause sync highlighting'}>
-              <Icon as={paused ? Play : Pause} size={20} />
-            </Button>
-          )}
         </View>
       )}
 
