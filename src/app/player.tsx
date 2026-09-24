@@ -102,8 +102,8 @@ export default function PlayerScreen() {
   const plainText = player?.lyrics?.plain ?? null;
   const synced = useMemo(() => (syncedText ? parseLrc(syncedText) : null), [syncedText]);
   const plain = useMemo(() => (!synced && plainText ? plainLines(plainText) : null), [synced, plainText]);
-  // Plain view: the synced view without auto-scroll or dimmed lines. The clock keeps running,
-  // so switching back resumes at the right line.
+  // Plain view: the synced view with every sync feature off (auto-scroll, dimmed lines,
+  // tap-to-sync, ± nudge). The clock keeps running only so switching back lands on the right line.
   const [showPlain, setShowPlain] = useState(false);
   const { index, positionMs } = useSyncClock(synced ?? [], player?.sync ?? null, player?.nudgeMs ?? 0, calibrationMs);
 
@@ -225,7 +225,7 @@ export default function PlayerScreen() {
             state={showPlain ? 'static' : !sync ? 'future' : i === index ? 'current' : i < index ? 'past' : 'future'}
             index={i}
             onLineLayout={onLineLayout}
-            onSelect={onSelectLine}
+            onSelect={showPlain ? undefined : onSelectLine}
           />
         ))}
         {plain?.map((text, i) => (
@@ -253,7 +253,7 @@ export default function PlayerScreen() {
           onCancel={recognizer.cancel}
         />
         <View className="flex-row items-center gap-1">
-          {synced && sync && (
+          {synced && sync && !showPlain && (
             <>
               <Button
                 variant="ghost"
