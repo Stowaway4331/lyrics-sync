@@ -101,3 +101,13 @@ cd worker && npm run typecheck && npm test
 ```
 
 Lyrics are shown for personal use. A public release needs a licensed lyrics provider.
+
+# TODO
+- Fix web deployment
+- Add button to clear current song
+- Change archive chat storage from full chat to AI summary.
+- Add song search by text feature
+- Add agentic integration. Requests from chat like "show me lyrics for this song" should return results from LRCLIB and also quick action buttons to view synced lyrics should be available.
+  
+## Future scope
+- Spotify / YTMusic / Apple Music integration. (Add to playlist, share link, etc)
